@@ -1,0 +1,2285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moriyama House (2005) — Ryue Nishizawa / SANAA — Full Architectural Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #cbd5e1;
+        }
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .arch-glass {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.65);
+        }
+        .arch-glass-dark {
+            background: rgba(18, 20, 24, 0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+        .mode-btn.active, .chapter-btn.active {
+            background-color: #18181b;
+            color: #ffffff;
+        }
+        .vol-pill.active {
+            background-color: #059669;
+            color: #ffffff;
+        }
+        .scene-marker {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: auto;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+            will-change: left, top;
+        }
+        .scene-marker:hover {
+            transform: translate(-50%, -110%) scale(1.08);
+            z-index: 25;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        input[type="range"] {
+            accent-color: #18181b;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Viewport Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Floating 3D Volume & Context Markers Container -->
+    <div id="markers-container" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- Clean Minimalist UI Overlay -->
+    <div class="fixed inset-0 pointer-events-none z-20 flex flex-col justify-between p-4 sm:p-5">
+
+        <!-- TOP BAR: Brand Card & View Controls -->
+        <div class="flex flex-wrap justify-between items-start gap-3 w-full">
+            
+            <!-- Brand & Volume Selector A-J -->
+            <div class="arch-glass pointer-events-auto rounded-2xl px-4 py-3 flex flex-col gap-1.5 shadow-sm">
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase bg-zinc-900 text-white rounded">SANAA</span>
+                    <h1 class="text-base sm:text-lg font-bold tracking-tight text-zinc-900">Moriyama House</h1>
+                    <span class="text-xs font-medium text-zinc-500">森山邸 (2005) • 1:100 Plan & Roji Edition</span>
+                </div>
+                <div class="pt-0.5 flex items-center gap-1 overflow-x-auto no-scrollbar">
+                    <div id="volume-pills-bar" class="flex items-center gap-1"></div>
+                </div>
+            </div>
+
+            <!-- View Modes & Solar Time Bar -->
+            <div class="flex flex-wrap items-center gap-2.5 pointer-events-auto">
+                <div class="arch-glass rounded-2xl p-1.5 flex items-center gap-1 shadow-sm">
+                    <button id="mode-exterior" onclick="setViewMode('exterior')" class="mode-btn active whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold transition">
+                        Exterior
+                    </button>
+                    <button id="mode-courtyard" onclick="triggerCourtyardPhotoView()" class="mode-btn whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-600"></span>
+                        Photo View
+                    </button>
+                    <button id="mode-dollhouse" onclick="setViewMode('dollhouse')" class="mode-btn whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                        Plan Cutaway
+                    </button>
+                    <button id="mode-xray" onclick="setViewMode('xray')" class="mode-btn whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                        X-Ray
+                    </button>
+                    <button id="mode-satellite" onclick="triggerSatelliteMatchView()" class="mode-btn whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                        Satellite
+                    </button>
+                    <button id="mode-labels" onclick="toggleLabels()" class="whitespace-nowrap px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 text-white transition" title="Toggle Pins">
+                        Pins
+                    </button>
+                </div>
+
+                <!-- Solar Time Slider Pill -->
+                <div class="arch-glass rounded-2xl px-4 py-2 flex items-center gap-3 shadow-sm">
+                    <span id="time-label" class="text-xs font-bold text-zinc-800 whitespace-nowrap w-24">14:15 • Day</span>
+                    <input id="time-slider" type="range" min="0" max="24" step="0.1" value="14.25" class="w-28" oninput="updateTimeOfDay(this.value)">
+                </div>
+            </div>
+        </div>
+
+        <!-- MIDDLE AREA: Right Volume Inspector Card -->
+        <div class="flex justify-end items-center my-auto pointer-events-none">
+            <div id="inspector-card" class="arch-glass-dark pointer-events-auto rounded-2xl p-4 max-w-xs w-full transition-all duration-300 hidden shadow-2xl">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span id="insp-tag" class="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Volume</span>
+                        <h3 id="insp-title" class="text-base font-bold text-white mt-1">Volume A</h3>
+                    </div>
+                    <button onclick="closeInspector()" class="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+                <p id="insp-desc" class="text-xs text-zinc-300 mt-2 leading-relaxed"></p>
+                <div class="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-white/10 text-xs">
+                    <div class="bg-white/5 rounded-lg p-2">
+                        <div class="text-[9px] text-zinc-400 uppercase">Program (1:100 Plan)</div>
+                        <div id="insp-program" class="font-semibold text-white mt-0.5"></div>
+                    </div>
+                    <div class="bg-white/5 rounded-lg p-2">
+                        <div class="text-[9px] text-zinc-400 uppercase">Section / Scale</div>
+                        <div id="insp-levels" class="font-semibold text-white mt-0.5"></div>
+                    </div>
+                </div>
+                <div id="insp-concept" class="text-[11px] text-zinc-300 mt-2.5 pt-2 border-t border-white/10 italic"></div>
+            </div>
+        </div>
+
+        <!-- BOTTOM BAR: 5 Direct Camera Presets -->
+        <div class="flex justify-center items-center w-full">
+            <div class="arch-glass pointer-events-auto rounded-2xl p-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar max-w-full shadow-sm">
+                <button onclick="selectChapter(0)" id="chap-btn-0" class="chapter-btn active whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold transition">
+                    01 Axonometric Overview
+                </button>
+                <button onclick="triggerCourtyardPhotoView()" id="chap-btn-2" class="chapter-btn whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                    02 Courtyard Reading Table (Photo)
+                </button>
+                <button onclick="selectChapter(3)" id="chap-btn-3" class="chapter-btn whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                    03 1:100 Plan Cutaway & Bridges
+                </button>
+                <button onclick="selectChapter(1)" id="chap-btn-1" class="chapter-btn whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                    04 Satellite Top-Down
+                </button>
+                <button onclick="selectChapter(4)" id="chap-btn-4" class="chapter-btn whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 hover:bg-zinc-200/60 transition">
+                    05 Roji Wires, Bikes & Dusk
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ============================================================================
+        // 1. ARCHITECTURAL 1:100 PLAN & SATELLITE DATA (35.5676201° N, 139.7095403° E)
+        // ============================================================================
+        const SITE_ROTATION = 0.26; // 15° NNW–SSE Kamata urban block rotation
+
+        const VOLUMES_DATA = [
+            {
+                id: 'A',
+                name: 'Volume A — Owner Main Tower (Plan I)',
+                shortLabel: 'A',
+                tag: 'Owner Residence • NW Corner',
+                x: -3.1, z: -3.6,
+                w: 3.8, d: 4.6, h: 8.6,
+                floors: 3, sunken: 0.45,
+                program: 'B: Audio • G: Living/Bath • 1F: Study • 2F: Bed',
+                levelsText: '3 Storeys + Semi-Basement',
+                desc: 'Mr. Moriyama’s primary multi-storey tower in the northwest corner. Features a gridded tatami/rug lounge, vinyl turntable, enclosed bath/WC core, double-sided 2F book stacks with study desk, and a glazed corridor bridge linking directly to Dining Volume B.',
+                concept: 'Large square windows frame the diagonal steel staircase and flood the book stacks with north-east light.',
+                windows: [
+                    { face: 'E', floor: 0, xOff: 0.2, w: 2.3, h: 2.1, sill: 0.0, curtain: true },
+                    { face: 'S', floor: 0, xOff: 0.0, w: 2.1, h: 2.0, sill: 0.0, sliding: true },
+                    { face: 'E', floor: 1, xOff: -0.25, w: 2.1, h: 1.75, sill: 0.45, curtain: true },
+                    { face: 'N', floor: 1, xOff: 0.3, w: 1.9, h: 1.5, sill: 0.5 },
+                    { face: 'S', floor: 2, xOff: 0.0, w: 2.4, h: 1.7, sill: 0.45, curtain: true },
+                    { face: 'E', floor: 2, xOff: 0.3, w: 1.8, h: 1.55, sill: 0.45 }
+                ]
+            },
+            {
+                id: 'B',
+                name: 'Volume B — Sunken Dining Pavilion (Plan F)',
+                shortLabel: 'B',
+                tag: 'Owner Residence • North Edge',
+                x: 0.35, z: -6.15,
+                w: 3.3, d: 2.25, h: 3.1,
+                floors: 1, sunken: 0.72,
+                program: 'G: Sunken Dining Room & Kitchen',
+                levelsText: '1 Storey (Sunken -0.72m)',
+                desc: 'Connected to Volume A via a glass-enclosed ground bridge (with slippers neatly placed inside). Excavated 72cm into the soil so two diners seated at the table look directly across the courtyard moss and cafe table.',
+                concept: 'A glass corridor bridge links Volume A and Volume B while preserving the pocket tree between them.',
+                windows: [
+                    { face: 'S', floor: 0, xOff: 0.0, w: 2.5, h: 2.15, sill: 0.0, sliding: true, curtain: true },
+                    { face: 'E', floor: 0, xOff: 0.0, w: 1.5, h: 1.9, sill: 0.1 }
+                ]
+            },
+            {
+                id: 'C',
+                name: 'Volume C — Courtyard Bath Cube (Plan G)',
+                shortLabel: 'C',
+                tag: 'Owner Sanctuary • West-Central',
+                x: -4.05, z: 0.65,
+                w: 1.85, d: 2.35, h: 2.9,
+                floors: 1, sunken: 0,
+                program: 'G: Master Bathroom Sanctuary',
+                levelsText: '1 Storey (2.9m)',
+                desc: 'Compact freestanding bathroom cube with a soaking tub, washbasin, hinoki cypress stool, potted fern, and a pair of slippers waiting on the stone threshold outside.',
+                concept: 'Turns daily bathing into a tranquil stroll across the courtyard garden.',
+                windows: [
+                    { face: 'E', floor: 0, xOff: 0.0, w: 1.4, h: 1.8, sill: 0.4, frosted: true },
+                    { face: 'N', floor: 0, xOff: 0.0, w: 1.1, h: 1.4, sill: 0.6, frosted: true }
+                ]
+            },
+            {
+                id: 'D',
+                name: 'Volume D — Central Courtyard Unit (Plan D/H)',
+                shortLabel: 'D',
+                tag: 'Courtyard Unit • Left in Homma Photo',
+                x: -2.35, z: 3.65,
+                w: 3.35, d: 2.6, h: 5.6,
+                floors: 2, sunken: 0,
+                program: 'G: Open-Frame Kitchen & Living • 1F: Loft',
+                levelsText: '2 Storeys (5.6m)',
+                desc: 'Featured on the left of Takashi Homma’s courtyard photograph. Wide corner sliding aluminum glass doors reveal the tubular stainless-steel kitchen counter, gooseneck faucet, dish rack, stacked orange/blue crates, and white mini-fridge. Connected on the south side via a glass bridge to Bath Cube H.',
+                concept: 'Corner sliding doors and exterior steel steps dissolve indoor cooking into the courtyard reading space.',
+                windows: [
+                    { face: 'S', floor: 0, xOff: -0.2, w: 2.25, h: 2.15, sill: 0.0, sliding: true },
+                    { face: 'E', floor: 0, xOff: 0.0, w: 1.75, h: 2.15, sill: 0.0, sliding: true },
+                    { face: 'S', floor: 1, xOff: -0.2, w: 2.1, h: 1.6, sill: 0.5, curtain: true },
+                    { face: 'N', floor: 1, xOff: 0.2, w: 1.6, h: 1.4, sill: 0.6 }
+                ]
+            },
+            {
+                id: 'E',
+                name: 'Volume E — East Lane Atelier (Map Pin)',
+                shortLabel: 'E',
+                tag: 'Rental Unit • East Street',
+                x: 1.85, z: -2.05,
+                w: 3.6, d: 4.0, h: 6.1,
+                floors: 2, sunken: 0,
+                program: 'G: Living & Rug Lounge • 1F: Loft + Roof Deck',
+                levelsText: '2 Storeys + Timber Deck',
+                desc: 'Carries the Google Maps marker for Moriyama House (株式会社オカビート). Contains a large central rug with a resident reading, open kitchen, 2F loft, and a slatted wooden engawa deck along its courtyard edge.',
+                concept: 'Large aligned apertures create diagonal sightlines from the public street straight through to the inner trees.',
+                windows: [
+                    { face: 'W', floor: 0, xOff: 0.0, w: 2.5, h: 2.2, sill: 0.0, sliding: true, curtain: true },
+                    { face: 'S', floor: 0, xOff: 0.1, w: 2.1, h: 2.0, sill: 0.1 },
+                    { face: 'E', floor: 1, xOff: -0.2, w: 2.2, h: 1.7, sill: 0.5, curtain: true },
+                    { face: 'W', floor: 1, xOff: 0.2, w: 2.0, h: 1.6, sill: 0.5 }
+                ]
+            },
+            {
+                id: 'F',
+                name: 'Volume F — Timber Annex Pavilion (Plan C)',
+                shortLabel: 'F',
+                tag: 'Courtyard Unit • Right in Homma Photo',
+                x: 0.75, z: 2.8,
+                w: 2.55, d: 3.05, h: 3.05,
+                floors: 1, sunken: 0.38,
+                program: 'G: Sunken Timber Annex & Reading Lounge',
+                levelsText: '1 Storey (Sunken -0.38m)',
+                desc: 'Featured on the right side of Takashi Homma’s photograph. Floor-to-ceiling timber boards with a resident lying down reading among scattered cushions, plus an entry step bench with slippers outside.',
+                concept: 'Frames the outdoor folding wooden reading table and camellia bush.',
+                windows: [
+                    { face: 'W', floor: 0, xOff: 0.1, w: 1.95, h: 1.75, sill: 0.55, sliding: true },
+                    { face: 'S', floor: 0, xOff: 0.0, w: 1.8, h: 1.9, sill: 0.0, curtain: true }
+                ]
+            },
+            {
+                id: 'G',
+                name: 'Volume G — Southeast 3F Tower (Plan B)',
+                shortLabel: 'G',
+                tag: 'Rental Unit • SE Street Corner',
+                x: 2.2, z: 6.8,
+                w: 3.85, d: 3.8, h: 7.8,
+                floors: 3, sunken: 0,
+                program: 'G: Kitchen/Dining • 1F: Sunroom & Bath • 2F: Bed',
+                levelsText: '3 Storeys (7.8m)',
+                desc: 'Three-storey southeastern corner tower (Plan B in 1:100 drawings). Features an L-shaped kitchen and 3-person dining table on 1F, a straight staircase visible through the facade window, a 2F bathroom + sunroom with indoor plants, and a 3F bedroom.',
+                concept: 'Diagonal staircase behind the upper window echoes Volume A at the opposite corner of the site.',
+                windows: [
+                    { face: 'N', floor: 0, xOff: -0.2, w: 2.4, h: 2.1, sill: 0.0, sliding: true, curtain: true },
+                    { face: 'W', floor: 0, xOff: 0.0, w: 2.2, h: 2.0, sill: 0.1 },
+                    { face: 'E', floor: 1, xOff: 0.1, w: 2.1, h: 1.75, sill: 0.35 },
+                    { face: 'N', floor: 1, xOff: 0.2, w: 2.2, h: 1.6, sill: 0.45, curtain: true },
+                    { face: 'E', floor: 2, xOff: -0.2, w: 1.9, h: 1.5, sill: 0.45 }
+                ]
+            },
+            {
+                id: 'H',
+                name: 'Volume H — South Linked Bath Cube (Plan E)',
+                shortLabel: 'H',
+                tag: 'Rental Unit • SW Maple Court',
+                x: -2.25, z: 7.45,
+                w: 2.0, d: 1.95, h: 2.95,
+                floors: 1, sunken: 0,
+                program: 'G: Linked Bathroom Pavilion (Tub & WC)',
+                levelsText: '1 Storey + Glass Bridge',
+                desc: 'Connected directly to Volume D via a glazed ground-floor corridor flanked by 6 small round shrubs (as shown in the 1:100 Ground Floor Plan). Houses a soaking bathtub, washbasin, and WC beneath the red Japanese maple.',
+                concept: 'Glazed corridor bridge lets residents walk from Volume D into their private bath surrounded by garden shrubs.',
+                windows: [
+                    { face: 'E', floor: 0, xOff: 0.0, w: 1.3, h: 1.6, sill: 0.5, frosted: true },
+                    { face: 'N', floor: 0, xOff: 0.0, w: 1.3, h: 1.6, sill: 0.5, frosted: true }
+                ]
+            },
+            {
+                id: 'I',
+                name: 'Volume I — East Alley Studio (Plan A)',
+                shortLabel: 'I',
+                tag: 'Rental Unit • East Street Edge',
+                x: 3.45, z: 2.2,
+                w: 1.7, d: 2.1, h: 5.2,
+                floors: 2, sunken: 0.3,
+                program: 'B: Bath • G: Island Kitchen • 1F: Bedroom',
+                levelsText: '2 Storeys (5.2m)',
+                desc: 'Compact two-storey rental unit along the eastern lane with a central kitchen island on the ground floor, bedroom with wardrobe above, and slatted timber deck outside.',
+                concept: 'Human-scaled volume that mediates between passing cyclists and the inner courtyard.',
+                windows: [
+                    { face: 'W', floor: 0, xOff: 0.0, w: 1.25, h: 1.8, sill: 0.2, curtain: true },
+                    { face: 'E', floor: 1, xOff: 0.0, w: 1.2, h: 1.4, sill: 0.45 }
+                ]
+            },
+            {
+                id: 'J',
+                name: 'Volume J — Northeast Corner Pavilion (Plan J)',
+                shortLabel: 'J',
+                tag: 'Rental Unit • NE Keyaki Canopy',
+                x: 2.55, z: -6.0,
+                w: 2.25, d: 2.3, h: 3.05,
+                floors: 1, sunken: 0,
+                program: 'G: Studio Living, Bed & Oval Bath',
+                levelsText: '1 Storey (3.05m)',
+                desc: 'Single-storey corner pavilion shaded under the giant northeast Keyaki tree. Contains an angled lounge chair with round table, bed, compact kitchen sink, and an en-suite oval bathtub.',
+                concept: 'Softens the street intersection with lush overhead foliage and crisp white steel geometry.',
+                windows: [
+                    { face: 'S', floor: 0, xOff: 0.0, w: 1.55, h: 1.85, sill: 0.2, curtain: true },
+                    { face: 'W', floor: 0, xOff: 0.0, w: 1.45, h: 1.85, sill: 0.2 }
+                ]
+            }
+        ];
+
+        // Context neighbors positioned so East Lane (x: 4.7 to 8.1) and North Lane (z: -10.9 to -8.1) are 100% unobstructed
+        const NEIGHBORS_DATA = [
+            {
+                id: 'N1', name: '西蒲田フォンテ (Fonte)',
+                x: -13.5, z: -15.6, w: 9.5, d: 8.4, h: 11.5,
+                wallColor: 0xe7e0d6, roofColor: 0x94a3b8, roofType: 'flat',
+                desc: 'Mid-rise beige tiled apartment block northwest of the intersection.'
+            },
+            {
+                id: 'N2', name: 'North Hip-Roof House',
+                x: -1.8, z: -14.5, w: 9.2, d: 5.8, h: 6.4,
+                wallColor: 0xd6d3d1, roofColor: 0x334155, roofType: 'hip',
+                desc: 'Traditional dark-slate hipped roof residence across the north lane.'
+            },
+            {
+                id: 'N3', name: 'Shinano Heights (信濃ハイツ)',
+                x: 13.5, z: -4.2, w: 10.2, d: 6.4, h: 7.8,
+                wallColor: 0xe2e8f0, roofColor: 0x475569, roofType: 'gable',
+                desc: 'Twin-gabled residential building across the East Lane.'
+            },
+            {
+                id: 'N4', name: '森山 (Terracotta Roof)',
+                x: 13.2, z: 1.8, w: 9.5, d: 4.4, h: 5.8,
+                wallColor: 0xf5f5f4, roofColor: 0x991b1b, roofType: 'gable',
+                desc: 'Narrow reddish-brown roofed house facing the East Lane.'
+            },
+            {
+                id: 'N5', name: 'Arein (アレイン)',
+                x: 13.8, z: 9.0, w: 10.2, d: 8.8, h: 9.6,
+                wallColor: 0xf1f5f9, roofColor: 0x64748b, roofType: 'flat',
+                desc: 'Modern multi-unit apartment building to the southeast.'
+            },
+            {
+                id: 'N6', name: 'South House #21',
+                x: 0.4, z: 13.8, w: 8.4, d: 6.8, h: 6.8,
+                wallColor: 0xe2e8f0, roofColor: 0x334155, roofType: 'hip',
+                desc: 'Neighboring two-storey residence directly bordering the south boundary.'
+            },
+            {
+                id: 'N7', name: 'フォレスト (Forest)',
+                x: -8.2, z: 8.5, w: 7.2, d: 8.2, h: 7.5,
+                wallColor: 0xd6d3d1, roofColor: 0x334155, roofType: 'hip',
+                desc: 'Dark grey hip-roofed apartment building immediately to the southwest.'
+            },
+            {
+                id: 'N8', name: 'West Brown-Roof House',
+                x: -10.2, z: -1.8, w: 6.8, d: 9.0, h: 6.4,
+                wallColor: 0xe5e5e5, roofColor: 0x574136, roofType: 'hip',
+                desc: 'Immediate western neighbor with grey exterior cladding and gas meter visible in Takashi Homma’s photo.'
+            }
+        ];
+
+        const CHAPTERS = [
+            {
+                title: '01 Axonometric Overview',
+                target: { x: -0.4, y: 1.8, z: 1.0 },
+                spherical: { radius: 26, phi: 0.92, theta: -0.64 },
+                mode: 'exterior'
+            },
+            {
+                title: '04 Satellite Top-Down',
+                target: { x: 0.0, y: 0.0, z: 0.5 },
+                spherical: { radius: 44, phi: 0.05, theta: 0.0 },
+                mode: 'exterior'
+            },
+            {
+                title: '02 Courtyard Photo',
+                target: { x: -0.95, y: 1.25, z: 2.65 },
+                spherical: { radius: 4.55, phi: 1.46, theta: -0.02 },
+                mode: 'exterior'
+            },
+            {
+                title: '03 1:100 Plan Cutaway & Bridges',
+                target: { x: -0.8, y: 1.4, z: 0.6 },
+                spherical: { radius: 19.5, phi: 0.72, theta: 0.52 },
+                mode: 'dollhouse'
+            },
+            {
+                title: '05 Roji Wires, Bikes & Dusk',
+                target: { x: 2.4, y: 2.2, z: -2.5 },
+                spherical: { radius: 21, phi: 1.06, theta: 0.82 },
+                mode: 'exterior',
+                timePreset: 18.5
+            }
+        ];
+
+        // ============================================================================
+        // 2. SCENE GLOBALS & STATE
+        // ============================================================================
+        let scene, camera, renderer, clock;
+        let siteGroup;
+        let ambientLight, sunLight, hemiLight;
+        const interiorPointLights = [];
+        const streetPointLights = [];
+
+        const volumeGroups = {};
+        const volumeWallMaterials = {};
+        const volumeRoofGroups = {};
+        const volumeEdges = {};
+        const volumeMeshes = [];
+        const curtainMeshes = [];
+
+        const vehicles = [];
+        const cyclists = [];
+        const pedestrians = [];
+        const gardenPets = [];
+        const markerElements = [];
+        const tempProjVec = new THREE.Vector3();
+        let showLabels = true;
+        let currentViewMode = 'exterior';
+        let currentTimeHours = 14.25;
+
+        const camState = {
+            target: new THREE.Vector3(-0.4, 1.8, 1.0),
+            desiredTarget: new THREE.Vector3(-0.4, 1.8, 1.0),
+            radius: 26,
+            desiredRadius: 26,
+            phi: 0.92,
+            desiredPhi: 0.92,
+            theta: -0.64,
+            desiredTheta: -0.64,
+            isDragging: false,
+            isPanning: false,
+            prevMouse: { x: 0, y: 0 },
+            pointerDownPos: { x: 0, y: 0 }
+        };
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // ============================================================================
+        // 3. INITIALIZATION
+        // ============================================================================
+        window.onload = function () {
+            initThreeScene();
+            buildRotatedUrbanSiteAndOverheadWires();
+            buildMoriyamaVolumes();
+            buildGlazedCorridorBridgesAndDecks();
+            buildTakashiHommaCourtyardVignette();
+            buildCourtyardTreesAndGardens();
+            buildSurroundingNeighbors();
+            spawnBikesPedestriansAndSingleCar();
+            buildVolumePillsUI();
+            setupOrbitAndRaycastControls();
+            updateTimeOfDay(14.25);
+            animate();
+        };
+
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xcbd5e1);
+            scene.fog = new THREE.FogExp2(0xcbd5e1, 0.0055);
+
+            camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.3, 240);
+            clock = new THREE.Clock();
+
+            renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                powerPreference: "high-performance"
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.06;
+            container.appendChild(renderer.domElement);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.56);
+            scene.add(ambientLight);
+
+            hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x78716c, 0.64);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            sunLight = new THREE.DirectionalLight(0xfffbeb, 1.38);
+            sunLight.position.set(-24, 42, 26);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 5;
+            sunLight.shadow.camera.far = 110;
+            const d = 32;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            sunLight.shadow.bias = -0.0004;
+            scene.add(sunLight);
+        }
+
+        function createSteelPlateWallTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fcfcfa';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.strokeStyle = 'rgba(175, 175, 170, 0.25)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= 256; x += 64) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
+            }
+            for (let y = 0; y <= 256; y += 128) {
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(256, y); ctx.stroke();
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(2, 2);
+            return tex;
+        }
+
+        // ============================================================================
+        // 4. URBAN SITE, UTILITY POLES & OVERHEAD ELECTRICAL CABLES
+        // ============================================================================
+        function buildRotatedUrbanSiteAndOverheadWires() {
+            siteGroup = new THREE.Group();
+            siteGroup.rotation.y = SITE_ROTATION;
+            scene.add(siteGroup);
+
+            const cityBase = new THREE.Mesh(
+                new THREE.PlaneGeometry(220, 220),
+                new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.92 })
+            );
+            cityBase.rotation.x = -Math.PI / 2;
+            cityBase.position.y = -0.06;
+            cityBase.receiveShadow = true;
+            siteGroup.add(cityBase);
+
+            const asphaltMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.88 });
+            const lineWhiteMat = new THREE.MeshBasicMaterial({ color: 0xe2e8f0 });
+
+            // East Lane (Unobstructed corridor x = 4.6 to 8.2)
+            const eastLane = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 60), asphaltMat);
+            eastLane.rotation.x = -Math.PI / 2;
+            eastLane.position.set(6.4, -0.02, 0);
+            eastLane.receiveShadow = true;
+            siteGroup.add(eastLane);
+
+            // White painted Japanese road edge lines along East Lane
+            [-1.65, 1.65].forEach(offset => {
+                const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 58), lineWhiteMat);
+                strip.rotation.x = -Math.PI / 2;
+                strip.position.set(6.4 + offset, -0.01, 0);
+                siteGroup.add(strip);
+            });
+
+            // North Lane (Unobstructed corridor z = -11.2 to -7.8)
+            const northLane = new THREE.Mesh(new THREE.PlaneGeometry(60, 3.6), asphaltMat);
+            northLane.rotation.x = -Math.PI / 2;
+            northLane.position.set(0, -0.015, -9.5);
+            northLane.receiveShadow = true;
+            siteGroup.add(northLane);
+
+            // Packed sandy-earth & moss plot (290 m²)
+            const plotEarth = new THREE.Mesh(
+                new THREE.BoxGeometry(9.6, 0.12, 18.2),
+                new THREE.MeshStandardMaterial({ color: 0x9c8f7a, roughness: 0.96 })
+            );
+            plotEarth.position.set(-0.2, 0.0, 0.6);
+            plotEarth.receiveShadow = true;
+            siteGroup.add(plotEarth);
+
+            // Red Japanese Beverage Vending Machine (Jihanki) & Trash Net on East Lane
+            const jihanki = new THREE.Group();
+            const vmBody = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.85, 1.15), new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.35 }));
+            vmBody.position.y = 0.925;
+            vmBody.castShadow = true;
+            const vmDisplay = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.85), new THREE.MeshBasicMaterial({ color: 0xfef9c3 }));
+            vmDisplay.rotation.y = -Math.PI / 2;
+            vmDisplay.position.set(-0.37, 1.25, 0);
+            jihanki.add(vmBody, vmDisplay);
+            jihanki.position.set(8.35, 0, -0.8);
+            siteGroup.add(jihanki);
+
+            // Japanese Utility Poles (Denchu), Cylindrical Transformers & Multi-Tiered Catenary Overhead Cables
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 });
+            const darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.4 });
+            const ceramicMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2 });
+            const transformerMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.45, metalness: 0.3 });
+
+            const poles = [
+                { x: 4.55, z: -16.5, hasTransformer: false, hasMirror: false },
+                { x: 4.55, z: -7.55, hasTransformer: true,  hasMirror: true  },
+                { x: 4.55, z: 1.2,   hasTransformer: false, hasMirror: false },
+                { x: 4.55, z: 9.8,   hasTransformer: true,  hasMirror: false },
+                { x: -5.4, z: -7.55, hasTransformer: false, hasMirror: false }
+            ];
+
+            poles.forEach((p) => {
+                const pGroup = new THREE.Group();
+
+                // Concrete pole shaft
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.16, 8.2, 10), poleMat);
+                pole.position.y = 4.1;
+                pole.castShadow = true;
+                pGroup.add(pole);
+
+                // Yellow/black lower guy-wire protector sleeve
+                const guard = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.8, 6), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
+                guard.position.set(0, 0.9, 0.28);
+                guard.rotation.x = -0.15;
+                pGroup.add(guard);
+
+                // Upper & Lower Galvanized Cross-Arms with Ceramic Insulators
+                [7.6, 6.5].forEach((armY, aIdx) => {
+                    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.07, 0.07), darkSteelMat);
+                    arm.position.set(0, armY, 0);
+                    pGroup.add(arm);
+
+                    [-0.52, 0.0, 0.52].forEach(ix => {
+                        const ins = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.14, 8), ceramicMat);
+                        ins.position.set(ix, armY + 0.09, 0);
+                        pGroup.add(ins);
+                    });
+
+                    if (aIdx === 1) {
+                        // Coiled fiber-optic slack loop
+                        const loop = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.015, 6, 16), new THREE.MeshBasicMaterial({ color: 0x0f172a }));
+                        loop.position.set(0, 5.75, 0.18);
+                        loop.rotation.y = Math.PI / 2;
+                        pGroup.add(loop);
+                    }
+                });
+
+                // Cylindrical Pole-Mounted Distribution Transformer (柱上変圧器)
+                if (p.hasTransformer) {
+                    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.72, 12), transformerMat);
+                    drum.position.set(-0.28, 5.85, -0.22);
+                    drum.castShadow = true;
+                    pGroup.add(drum);
+
+                    const drum2 = drum.clone();
+                    drum2.scale.set(0.85, 0.9, 0.85);
+                    drum2.position.set(0.26, 5.85, -0.22);
+                    pGroup.add(drum2);
+                }
+
+                // Orange Convex Traffic Safety Mirror (Kagami) at NE Corner
+                if (p.hasMirror) {
+                    const orangeHood = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.34, 0.34, 0.08, 16),
+                        new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.3 })
+                    );
+                    orangeHood.rotation.x = Math.PI / 2;
+                    orangeHood.rotation.z = -0.6;
+                    orangeHood.position.set(-0.28, 3.25, 0.26);
+                    pGroup.add(orangeHood);
+
+                    const mirrorGlass = new THREE.Mesh(
+                        new THREE.CircleGeometry(0.29, 16),
+                        new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.9, roughness: 0.1 })
+                    );
+                    mirrorGlass.position.set(-0.31, 3.25, 0.29);
+                    mirrorGlass.rotation.y = -0.6;
+                    pGroup.add(mirrorGlass);
+                }
+
+                // Streetlight bracket + dusk/night PointLight
+                const lampArm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.15, 6), darkSteelMat);
+                lampArm.rotation.z = Math.PI / 3;
+                lampArm.position.set(0.45, 5.3, 0);
+                pGroup.add(lampArm);
+
+                const pLight = new THREE.PointLight(0xffedd5, 0, 15, 2);
+                pLight.position.set(0.85, 5.1, 0);
+                pGroup.add(pLight);
+                streetPointLights.push(pLight);
+
+                pGroup.position.set(p.x, 0, p.z);
+                siteGroup.add(pGroup);
+            });
+
+            // String Multi-Tiered Catenary Overhead Electrical Cables between Poles
+            const wireMatThin = new THREE.MeshBasicMaterial({ color: 0x18181b });
+            const wireMatThick = new THREE.MeshBasicMaterial({ color: 0x09090b });
+
+            function addSaggingWire(p1, p2, sag, radius, mat) {
+                const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+                mid.y -= sag;
+                const curve = new THREE.QuadraticBezierCurve3(p1, mid, p2);
+                const tubeGeo = new THREE.TubeGeometry(curve, 14, radius, 5, false);
+                const mesh = new THREE.Mesh(tubeGeo, mat);
+                siteGroup.add(mesh);
+            }
+
+            // Connect East Lane pole chain (Poles 0 -> 1 -> 2 -> 3)
+            for (let i = 0; i < 3; i++) {
+                const pa = poles[i];
+                const pb = poles[i + 1];
+                // Top 3 high-voltage phase wires
+                [-0.5, 0.0, 0.5].forEach(xOff => {
+                    addSaggingWire(
+                        new THREE.Vector3(pa.x + xOff, 7.68, pa.z),
+                        new THREE.Vector3(pb.x + xOff, 7.68, pb.z),
+                        0.38, 0.014, wireMatThin
+                    );
+                });
+                // Middle 2 distribution cables
+                [-0.35, 0.35].forEach(xOff => {
+                    addSaggingWire(
+                        new THREE.Vector3(pa.x + xOff, 6.55, pa.z),
+                        new THREE.Vector3(pb.x + xOff, 6.55, pb.z),
+                        0.48, 0.018, wireMatThin
+                    );
+                });
+                // Lower thick bundled telecom trunk cable
+                addSaggingWire(
+                    new THREE.Vector3(pa.x + 0.1, 5.75, pa.z),
+                    new THREE.Vector3(pb.x + 0.1, 5.75, pb.z),
+                    0.55, 0.026, wireMatThick
+                );
+            }
+
+            // Connect North Lane cross-span (Pole 1 at NE corner -> Pole 4 at NW)
+            [-0.4, 0.0, 0.4].forEach(zOff => {
+                addSaggingWire(
+                    new THREE.Vector3(poles[1].x, 7.65, poles[1].z + zOff),
+                    new THREE.Vector3(poles[4].x, 7.65, poles[4].z + zOff),
+                    0.42, 0.014, wireMatThin
+                );
+            });
+            addSaggingWire(
+                new THREE.Vector3(poles[1].x, 5.75, poles[1].z),
+                new THREE.Vector3(poles[4].x, 5.75, poles[4].z),
+                0.52, 0.024, wireMatThick
+            );
+
+            // Service Drop Wires from Poles to Moriyama Volumes & Neighbor Houses
+            const serviceDrops = [
+                [new THREE.Vector3(4.55, 6.4, -7.55), new THREE.Vector3(2.55, 2.95, -5.0), 0.25], // To Volume J
+                [new THREE.Vector3(4.55, 6.4, -7.55), new THREE.Vector3(8.5, 6.8, -5.0), 0.35],   // To Shinano Heights N3
+                [new THREE.Vector3(4.55, 6.4, 1.2),   new THREE.Vector3(3.4, 5.8, -1.2), 0.22],   // To Volume E
+                [new THREE.Vector3(4.55, 6.4, 1.2),   new THREE.Vector3(8.5, 5.2, 1.5), 0.30],    // To Terracotta House N4
+                [new THREE.Vector3(4.55, 6.4, 9.8),   new THREE.Vector3(3.8, 7.4, 6.8), 0.25],    // To Volume G
+                [new THREE.Vector3(-5.4, 6.4, -7.55), new THREE.Vector3(-3.1, 8.2, -4.5), 0.25],  // To Volume A
+                [new THREE.Vector3(-5.4, 6.4, -7.55), new THREE.Vector3(-2.5, 5.8, -11.6), 0.30]  // To North House N2
+            ];
+            serviceDrops.forEach(([start, end, sag]) => {
+                addSaggingWire(start, end, sag, 0.011, wireMatThin);
+            });
+        }
+
+        // ============================================================================
+        // 5. MORIYAMA HOUSE 10 WHITE STEEL VOLUMES & 1:100 PLAN INTERIORS
+        // ============================================================================
+        function buildMoriyamaVolumes() {
+            const wallTex = createSteelPlateWallTexture();
+            const plinthMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.85 });
+            const floorWoodMat = new THREE.MeshStandardMaterial({ color: 0xd6b88e, roughness: 0.62 });
+            const gravelMat = new THREE.MeshStandardMaterial({ color: 0xd6d3d1, roughness: 0.95 });
+            const pipeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.35 });
+
+            VOLUMES_DATA.forEach(vol => {
+                const volGroup = new THREE.Group();
+                volGroup.position.set(vol.x, 0, vol.z);
+
+                const wallMat = new THREE.MeshStandardMaterial({
+                    color: 0xfcfcfa,
+                    map: wallTex,
+                    roughness: 0.34,
+                    metalness: 0.08,
+                    transparent: true,
+                    opacity: 1.0,
+                    side: THREE.DoubleSide
+                });
+                volumeWallMaterials[vol.id] = wallMat;
+
+                // Perimeter gravel drainage bed & dark recessed shadow plinth
+                const gravelBed = new THREE.Mesh(new THREE.BoxGeometry(vol.w + 0.22, 0.05, vol.d + 0.22), gravelMat);
+                gravelBed.position.y = 0.04;
+                gravelBed.receiveShadow = true;
+                volGroup.add(gravelBed);
+
+                const plinth = new THREE.Mesh(new THREE.BoxGeometry(vol.w - 0.04, 0.16, vol.d - 0.04), plinthMat);
+                plinth.position.y = 0.08;
+                volGroup.add(plinth);
+
+                // 65mm SANAA Ultra-Thin Welded Steel Plate Facades
+                const wallT = 0.065;
+                const faces = [
+                    { code: 'N', w: vol.w, h: vol.h, pos: [0, 0, -vol.d / 2], rotY: 0 },
+                    { code: 'S', w: vol.w, h: vol.h, pos: [0, 0, vol.d / 2], rotY: 0 },
+                    { code: 'E', w: vol.d, h: vol.h, pos: [vol.w / 2, 0, 0], rotY: Math.PI / 2 },
+                    { code: 'W', w: vol.d, h: vol.h, pos: [-vol.w / 2, 0, 0], rotY: Math.PI / 2 }
+                ];
+
+                faces.forEach(f => {
+                    const wins = (vol.windows || []).filter(w => w.face === f.code);
+                    const wallMeshGroup = buildWallWithWindows(f.w, f.h, wallT, wins, vol.floors, wallMat);
+                    wallMeshGroup.position.set(f.pos[0], 0, f.pos[2]);
+                    wallMeshGroup.rotation.y = f.rotY;
+                    volGroup.add(wallMeshGroup);
+                });
+
+                // Exterior Rain Downspout
+                const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, vol.h, 8), pipeMat);
+                spout.position.set(-vol.w / 2 + 0.06, vol.h / 2, -vol.d / 2 - 0.04);
+                volGroup.add(spout);
+
+                // Roof Assembly (Hidden in Cutaway Mode)
+                const roofGroup = new THREE.Group();
+                const roofSlab = new THREE.Mesh(
+                    new THREE.BoxGeometry(vol.w - 0.12, 0.08, vol.d - 0.12),
+                    new THREE.MeshStandardMaterial({ color: 0xd4d4d0, roughness: 0.85 })
+                );
+                roofSlab.position.y = vol.h - 0.08;
+                roofSlab.castShadow = true;
+                roofSlab.receiveShadow = true;
+                roofGroup.add(roofSlab);
+
+                const hatch = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.68, 0.12, 0.68),
+                    new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.4, metalness: 0.4 })
+                );
+                hatch.position.set(vol.w * 0.2, vol.h - 0.02, -vol.d * 0.18);
+                roofGroup.add(hatch);
+
+                if (vol.id === 'E') {
+                    const deck = new THREE.Mesh(
+                        new THREE.BoxGeometry(vol.w * 0.72, 0.05, vol.d * 0.68),
+                        new THREE.MeshStandardMaterial({ color: 0xa16207, roughness: 0.8 })
+                    );
+                    deck.position.set(0, vol.h + 0.02, 0.1);
+                    roofGroup.add(deck);
+                }
+
+                volGroup.add(roofGroup);
+                volumeRoofGroups[vol.id] = roofGroup;
+
+                // Floor Slabs & Interior Warm PointLights
+                const floorHeight = vol.h / vol.floors;
+                const baseOffset = vol.sunken ? -vol.sunken : 0.14;
+                for (let f = 0; f < vol.floors; f++) {
+                    const slabY = f === 0 ? baseOffset : f * floorHeight;
+                    const slab = new THREE.Mesh(
+                        new THREE.BoxGeometry(vol.w - 0.14, 0.08, vol.d - 0.14),
+                        floorWoodMat
+                    );
+                    slab.position.y = slabY;
+                    slab.receiveShadow = true;
+                    volGroup.add(slab);
+
+                    const intLight = new THREE.PointLight(0xffedd5, 0.35, 7.5, 1.8);
+                    intLight.position.set(0, slabY + floorHeight - 0.35, 0);
+                    volGroup.add(intLight);
+                    interiorPointLights.push(intLight);
+                }
+
+                populateDetailed1To100PlanInterior(volGroup, vol, baseOffset, floorHeight);
+
+                // Selection Outline
+                const edgeGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(vol.w + 0.05, vol.h + 0.05, vol.d + 0.05));
+                const edgeLine = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({ color: 0x059669 }));
+                edgeLine.position.y = vol.h / 2;
+                edgeLine.visible = false;
+                volGroup.add(edgeLine);
+                volumeEdges[vol.id] = edgeLine;
+
+                // Invisible Raycast Hitbox
+                const hitBox = new THREE.Mesh(
+                    new THREE.BoxGeometry(vol.w, vol.h, vol.d),
+                    new THREE.MeshBasicMaterial({ visible: false })
+                );
+                hitBox.position.y = vol.h / 2;
+                hitBox.userData = { volumeId: vol.id };
+                volGroup.add(hitBox);
+                volumeMeshes.push(hitBox);
+
+                volumeGroups[vol.id] = volGroup;
+                siteGroup.add(volGroup);
+
+                createFloating3DPin(vol.id, vol.shortLabel, vol.x, vol.h + 0.65, vol.z, 'volume');
+            });
+        }
+
+        function buildWallWithWindows(wallW, wallH, thickness, windows, numFloors, wallMat) {
+            const group = new THREE.Group();
+            const floorH = wallH / numFloors;
+            const glassMat = new THREE.MeshPhysicalMaterial({
+                color: 0xe0f2fe,
+                transparent: true,
+                opacity: 0.26,
+                roughness: 0.08,
+                metalness: 0.1,
+                reflectivity: 0.9
+            });
+            const frostedMat = new THREE.MeshStandardMaterial({
+                color: 0xf1f5f9,
+                transparent: true,
+                opacity: 0.72,
+                roughness: 0.45
+            });
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.6, roughness: 0.3 });
+            const curtainMat = new THREE.MeshStandardMaterial({
+                color: 0xfafaf9,
+                transparent: true,
+                opacity: 0.85,
+                side: THREE.DoubleSide,
+                roughness: 0.9
+            });
+
+            for (let f = 0; f < numFloors; f++) {
+                const yBottom = f * floorH;
+                const win = windows.find(w => w.floor === f);
+
+                if (!win) {
+                    const solid = new THREE.Mesh(new THREE.BoxGeometry(wallW, floorH, thickness), wallMat);
+                    solid.position.y = yBottom + floorH / 2;
+                    solid.castShadow = true;
+                    solid.receiveShadow = true;
+                    group.add(solid);
+                } else {
+                    const wW = Math.min(win.w, wallW - 0.35);
+                    const wH = Math.min(win.h, floorH - 0.22);
+                    const sillH = Math.max(0.06, win.sill);
+                    const headH = Math.max(0.06, floorH - sillH - wH);
+                    const winCenterX = THREE.MathUtils.clamp(win.xOff || 0, -(wallW - wW) / 2 + 0.12, (wallW - wW) / 2 - 0.12);
+
+                    const sill = new THREE.Mesh(new THREE.BoxGeometry(wallW, sillH, thickness), wallMat);
+                    sill.position.y = yBottom + sillH / 2;
+                    sill.castShadow = true;
+                    sill.receiveShadow = true;
+                    group.add(sill);
+
+                    const header = new THREE.Mesh(new THREE.BoxGeometry(wallW, headH, thickness), wallMat);
+                    header.position.y = yBottom + sillH + wH + headH / 2;
+                    header.castShadow = true;
+                    header.receiveShadow = true;
+                    group.add(header);
+
+                    const leftW = (wallW / 2) + (winCenterX - wW / 2);
+                    if (leftW > 0.04) {
+                        const leftPillar = new THREE.Mesh(new THREE.BoxGeometry(leftW, wH, thickness), wallMat);
+                        leftPillar.position.set(-wallW / 2 + leftW / 2, yBottom + sillH + wH / 2, 0);
+                        leftPillar.castShadow = true;
+                        leftPillar.receiveShadow = true;
+                        group.add(leftPillar);
+                    }
+
+                    const rightW = (wallW / 2) - (winCenterX + wW / 2);
+                    if (rightW > 0.04) {
+                        const rightPillar = new THREE.Mesh(new THREE.BoxGeometry(rightW, wH, thickness), wallMat);
+                        rightPillar.position.set(wallW / 2 - rightW / 2, yBottom + sillH + wH / 2, 0);
+                        rightPillar.castShadow = true;
+                        rightPillar.receiveShadow = true;
+                        group.add(rightPillar);
+                    }
+
+                    const topFrame = new THREE.Mesh(new THREE.BoxGeometry(wW, 0.035, thickness + 0.015), frameMat);
+                    topFrame.position.set(winCenterX, yBottom + sillH + wH - 0.018, 0);
+                    group.add(topFrame);
+
+                    const botFrame = new THREE.Mesh(new THREE.BoxGeometry(wW, 0.035, thickness + 0.02), frameMat);
+                    botFrame.position.set(winCenterX, yBottom + sillH + 0.018, 0);
+                    group.add(botFrame);
+
+                    if (win.sliding) {
+                        const mullion = new THREE.Mesh(new THREE.BoxGeometry(0.032, wH, thickness + 0.01), frameMat);
+                        mullion.position.set(winCenterX, yBottom + sillH + wH / 2, 0);
+                        group.add(mullion);
+                    }
+
+                    const glass = new THREE.Mesh(
+                        new THREE.PlaneGeometry(wW, wH),
+                        win.frosted ? frostedMat : glassMat
+                    );
+                    glass.position.set(winCenterX, yBottom + sillH + wH / 2, 0);
+                    group.add(glass);
+
+                    if (win.curtain) {
+                        const cPane = new THREE.Mesh(new THREE.PlaneGeometry(wW * 0.38, wH - 0.08, 4, 4), curtainMat);
+                        cPane.position.set(winCenterX - wW * 0.28, yBottom + sillH + wH / 2, -0.06);
+                        cPane.userData = { baseZ: -0.06, phase: Math.random() * Math.PI * 2 };
+                        group.add(cPane);
+                        curtainMeshes.push(cPane);
+                    }
+                }
+            }
+            return group;
+        }
+
+        // Helper for seated / reclining interior figures matching 1:100 inhabited plans
+        function createInhabitedFigure(pose, shirtHex) {
+            const fig = new THREE.Group();
+            const clothMat = new THREE.MeshStandardMaterial({ color: shirtHex || 0x18181b, roughness: 0.85 });
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.6 });
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.8 });
+
+            if (pose === 'reclining') {
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.72), clothMat);
+                torso.position.set(0, 0.1, 0);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), skinMat);
+                head.position.set(0, 0.22, -0.38);
+                const book = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.18), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                book.position.set(0, 0.14, -0.62);
+                fig.add(torso, head, book);
+            } else {
+                // Seated figure
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.46, 0.22), clothMat);
+                torso.position.set(0, 0.56, 0);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), skinMat);
+                head.position.set(0, 0.90, 0);
+                const hair = new THREE.Mesh(new THREE.SphereGeometry(0.115, 10, 10), hairMat);
+                hair.position.set(0, 0.92, -0.01);
+                fig.add(torso, head, hair);
+            }
+            return fig;
+        }
+
+        function createOpenFrameStainlessKitchen() {
+            const kGroup = new THREE.Group();
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, metalness: 0.82, roughness: 0.2 });
+            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+            const orangeCrateMat = new THREE.MeshStandardMaterial({ color: 0xea580c, roughness: 0.5 });
+            const blueCrateMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 });
+
+            const topSlab = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.045, 0.65), steelMat);
+            topSlab.position.y = 0.84;
+            kGroup.add(topSlab);
+
+            [[-0.68, -0.28], [0.68, -0.28], [-0.68, 0.28], [0.68, 0.28]].forEach(([lx, lz]) => {
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.84, 8), steelMat);
+                leg.position.set(lx, 0.42, lz);
+                kGroup.add(leg);
+            });
+
+            const faucetNeck = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.014, 8, 16, Math.PI), steelMat);
+            faucetNeck.position.set(-0.25, 1.02, -0.15);
+            kGroup.add(faucetNeck);
+
+            const dishRack = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.36), steelMat);
+            dishRack.position.set(0.28, 0.9, -0.05);
+            kGroup.add(dishRack);
+            for (let p = 0; p < 5; p++) {
+                const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.015, 12), whiteMat);
+                plate.rotation.z = Math.PI / 2 - 0.15;
+                plate.position.set(0.14 + p * 0.055, 0.98, -0.05);
+                kGroup.add(plate);
+            }
+
+            const orangeCrate = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.28, 0.38), orangeCrateMat);
+            orangeCrate.position.set(0.15, 0.36, 0.02);
+            kGroup.add(orangeCrate);
+
+            const blueCrate = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.22, 0.38), blueCrateMat);
+            blueCrate.position.set(0.15, 0.11, 0.02);
+            kGroup.add(blueCrate);
+
+            const miniFridge = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.68, 0.50), whiteMat);
+            miniFridge.position.set(0.65, 0.34, 0.25);
+            kGroup.add(miniFridge);
+
+            return kGroup;
+        }
+
+        function populateDetailed1To100PlanInterior(volGroup, vol, baseOffset, floorH) {
+            const oakMat = new THREE.MeshStandardMaterial({ color: 0xb48456, roughness: 0.6 });
+            const rugMat = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, roughness: 0.9 });
+            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xfafaf9, roughness: 0.4 });
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7, roughness: 0.3 });
+            const W = vol.w;
+
+            // VOLUME A (Plan I): Gridded tatami/rug + reclining reader + turntable + enclosed WC + 2F book stacks + diagonal stairs
+            if (vol.id === 'A') {
+                const y1 = baseOffset;
+
+                // Gridded central rug & seated/reclining resident (Plan I)
+                const rug = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.02, 2.2), rugMat);
+                rug.position.set(-0.35, y1 + 0.05, 0.1);
+                volGroup.add(rug);
+
+                const readerA = createInhabitedFigure('seated', 0x1e293b);
+                readerA.position.set(-0.35, y1 - 0.15, 0.1);
+                volGroup.add(readerA);
+
+                // Turntable console at north wall
+                const audioConsole = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.52, 0.45), oakMat);
+                audioConsole.position.set(-0.3, y1 + 0.28, -1.75);
+                volGroup.add(audioConsole);
+
+                // Enclosed toilet/shower box in NE corner
+                const wcCore = new THREE.Mesh(new THREE.BoxGeometry(1.25, 2.1, 1.1), whiteMat);
+                wcCore.position.set(0.95, y1 + 1.05, -1.1);
+                volGroup.add(wcCore);
+
+                // Diagonal cantilevered flight of stairs with thin handrail (visible through window as in Axonometric SE View)
+                for (let s = 0; s < 12; s++) {
+                    const tread = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.035, 0.24), whiteMat);
+                    tread.position.set(W / 2 - 0.46, y1 + (s + 1) * (floorH / 12), -1.5 + s * 0.25);
+                    volGroup.add(tread);
+                }
+                const handrail = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 3.8, 6), steelMat);
+                handrail.position.set(W / 2 - 0.8, y1 + floorH * 0.65, -0.1);
+                handrail.rotation.x = 0.72;
+                volGroup.add(handrail);
+
+                // 2F (First Floor Plan): Double-sided book stacks & long study desk with 2 chairs
+                const y2 = floorH;
+                const bookColors = [0xdc2626, 0x2563eb, 0xd97706, 0x059669, 0x4f46e5, 0xfafaf9];
+                for (let row = 0; row < 4; row++) {
+                    const plank = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 3.2), oakMat);
+                    plank.position.set(-W / 2 + 0.26, y2 + 0.32 + row * 0.38, 0);
+                    volGroup.add(plank);
+                    for (let b = 0; b < 10; b++) {
+                        const bk = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.22, 0.26, 0.09),
+                            new THREE.MeshStandardMaterial({ color: bookColors[(row + b) % bookColors.length] })
+                        );
+                        bk.position.set(-W / 2 + 0.26, y2 + 0.46 + row * 0.38, -1.35 + b * 0.28);
+                        volGroup.add(bk);
+                    }
+                }
+                const studyDesk = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.04, 1.85), oakMat);
+                studyDesk.position.set(-0.4, y2 + 0.72, 0.2);
+                volGroup.add(studyDesk);
+
+                // 3F Master Bedroom
+                const y3 = 2 * floorH;
+                const mattress = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.24, 1.95), whiteMat);
+                mattress.position.set(-0.35, y3 + 0.16, -0.35);
+                volGroup.add(mattress);
+            }
+
+            // VOLUME B (Plan F): Sunken dining table with 2 seated diners + open-frame kitchen
+            if (vol.id === 'B') {
+                const y0 = baseOffset;
+                const dTable = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.05, 0.82), oakMat);
+                dTable.position.set(-0.15, y0 + 0.72, 0.15);
+                volGroup.add(dTable);
+
+                const diner1 = createInhabitedFigure('seated', 0x334155);
+                diner1.position.set(-0.62, y0, 0.15);
+                const diner2 = createInhabitedFigure('seated', 0x0f766e);
+                diner2.position.set(0.32, y0, 0.15);
+                volGroup.add(diner1, diner2);
+
+                const kitchenB = createOpenFrameStainlessKitchen();
+                kitchenB.scale.set(0.85, 0.95, 0.85);
+                kitchenB.position.set(-1.1, y0, -0.1);
+                kitchenB.rotation.y = Math.PI / 2;
+                volGroup.add(kitchenB);
+            }
+
+            // VOLUME D (Plan D): Corner Open-Frame Kitchen (Homma Photo) + Lounge Chair + Bed + Garment Rack
+            if (vol.id === 'D') {
+                const y0 = baseOffset;
+                const kitchenD = createOpenFrameStainlessKitchen();
+                kitchenD.position.set(-0.15, y0, 0.32);
+                volGroup.add(kitchenD);
+
+                // Angled armchair & round coffee table (as drawn in Plan D)
+                const roundTable = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.38, 16), whiteMat);
+                roundTable.position.set(-0.55, y0 + 0.2, -0.35);
+                volGroup.add(roundTable);
+
+                const y2 = floorH;
+                const bedD = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.22, 1.75), whiteMat);
+                bedD.position.set(0.45, y2 + 0.15, -0.2);
+                volGroup.add(bedD);
+            }
+
+            // VOLUME E: Central Rug + Reclining Reader + Drafting Table with Miniature Moriyama Scale Model
+            if (vol.id === 'E') {
+                const y0 = baseOffset;
+                const rugE = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.02, 1.9), rugMat);
+                rugE.position.set(0, y0 + 0.05, 0.2);
+                volGroup.add(rugE);
+
+                const loungingE = createInhabitedFigure('reclining', 0x18181b);
+                loungingE.position.set(0.1, y0 + 0.06, 0.2);
+                volGroup.add(loungingE);
+
+                const archTable = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.05, 0.85), oakMat);
+                archTable.position.set(0, y0 + 0.74, -1.1);
+                volGroup.add(archTable);
+                for (let m = 0; m < 6; m++) {
+                    const miniCube = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16 + (m % 2) * 0.1, 0.12), whiteMat);
+                    miniCube.position.set(-0.28 + (m % 3) * 0.24, y0 + 0.84, -1.2 + Math.floor(m / 3) * 0.22);
+                    volGroup.add(miniCube);
+                }
+            }
+
+            // VOLUME F (Plan C Annex): Timber floor + Reclining Reader with Cushions
+            if (vol.id === 'F') {
+                const y0 = baseOffset;
+                const readerF = createInhabitedFigure('reclining', 0x3f3f46);
+                readerF.position.set(0.0, y0 + 0.08, 0.0);
+                volGroup.add(readerF);
+
+                // Scattered square floor cushions (zabuton)
+                [[-0.45, 0.55], [0.35, 0.65]].forEach(([cx, cz]) => {
+                    const cushion = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.38), rugMat);
+                    cushion.position.set(cx, y0 + 0.07, cz);
+                    cushion.rotation.y = 0.4;
+                    volGroup.add(cushion);
+                });
+            }
+
+            // VOLUME G (Plan B): 3-Storey SE Tower with L-Kitchen, 3 Diners, Diagonal Staircase & 2F Bath/Sunroom
+            if (vol.id === 'G') {
+                const y0 = baseOffset;
+                const tableG = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.05, 0.8), oakMat);
+                tableG.position.set(-0.65, y0 + 0.72, 0.35);
+                volGroup.add(tableG);
+
+                const dinerG1 = createInhabitedFigure('seated', 0x1e293b);
+                dinerG1.position.set(-0.85, y0, -0.15);
+                const dinerG2 = createInhabitedFigure('seated', 0x7c2d12);
+                dinerG2.position.set(-0.35, y0, 0.82);
+                volGroup.add(dinerG1, dinerG2);
+
+                // Diagonal staircase visible through East window (matching Axonometric SE View)
+                for (let s = 0; s < 11; s++) {
+                    const step = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.035, 0.24), whiteMat);
+                    step.position.set(W / 2 - 0.48, y0 + (s + 1) * (floorH / 11), -1.2 + s * 0.24);
+                    volGroup.add(step);
+                }
+                const railG = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 3.4, 6), steelMat);
+                railG.position.set(W / 2 - 0.8, y0 + floorH * 0.65, 0.0);
+                railG.rotation.x = 0.72;
+                volGroup.add(railG);
+            }
+
+            // VOLUMES C, H, J: Freestanding Soaking Bathtubs & Hinoki Stools
+            if (vol.id === 'C' || vol.id === 'H' || vol.id === 'J') {
+                const y0 = baseOffset + 0.08;
+                const tubOuter = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.56, 0.72), whiteMat);
+                tubOuter.position.set(0, y0 + 0.28, vol.id === 'J' ? 0.65 : -0.2);
+                volGroup.add(tubOuter);
+
+                const water = new THREE.Mesh(
+                    new THREE.PlaneGeometry(1.12, 0.60),
+                    new THREE.MeshStandardMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.78, roughness: 0.12 })
+                );
+                water.rotation.x = -Math.PI / 2;
+                water.position.set(0, y0 + 0.50, vol.id === 'J' ? 0.65 : -0.2);
+                volGroup.add(water);
+
+                const hinokiStool = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.20, 0.22), oakMat);
+                hinokiStool.position.set(0.28, y0 + 0.10, 0.35);
+                volGroup.add(hinokiStool);
+            }
+        }
+
+        // ============================================================================
+        // 6. 1:100 PLAN GLAZED CORRIDOR BRIDGES, ENGAWA DECKS & CAFE TABLE
+        // ============================================================================
+        function buildGlazedCorridorBridgesAndDecks() {
+            const glassBridgeMat = new THREE.MeshPhysicalMaterial({
+                color: 0xe0f2fe, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.1
+            });
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.3 });
+            const woodDeckMat = new THREE.MeshStandardMaterial({ color: 0xb48456, roughness: 0.75 });
+            const greenMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.85 });
+
+            // 1. Glazed Ground-Floor Corridor Bridge linking Volume A and Volume B (Plan F -> I)
+            const bridgeAB = new THREE.Group();
+            const abFloor = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.05), woodDeckMat);
+            abFloor.position.y = 0.12;
+            const abRoof = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.06, 1.1), frameMat);
+            abRoof.position.y = 2.25;
+            const abWallN = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.1), glassBridgeMat);
+            abWallN.position.set(0, 1.18, -0.52);
+            const abWallS = abWallN.clone();
+            abWallS.position.z = 0.52;
+            bridgeAB.add(abFloor, abRoof, abWallN, abWallS);
+            bridgeAB.position.set(-1.3, 0, -5.5);
+            siteGroup.add(bridgeAB);
+
+            // 2. Glazed Corridor Bridge linking Volume D and Volume H (Plan D -> E) + 6 Flanking Round Shrubs
+            const bridgeDH = new THREE.Group();
+            const dhFloor = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.08, 1.55), woodDeckMat);
+            dhFloor.position.y = 0.12;
+            const dhRoof = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.06, 1.6), frameMat);
+            dhRoof.position.y = 2.25;
+            const dhWallE = new THREE.Mesh(new THREE.PlaneGeometry(1.55, 2.1), glassBridgeMat);
+            dhWallE.rotation.y = Math.PI / 2;
+            dhWallE.position.set(0.52, 1.18, 0);
+            const dhWallW = dhWallE.clone();
+            dhWallW.position.x = -0.52;
+            bridgeDH.add(dhFloor, dhRoof, dhWallE, dhWallW);
+            bridgeDH.position.set(-2.3, 0, 5.72);
+            siteGroup.add(bridgeDH);
+
+            // 6 small round shrubs flanking Bridge DH (exact detail from 1:100 Ground Floor Plan)
+            [-0.85, 0.85].forEach(xSide => {
+                [-0.45, 0.0, 0.45].forEach(zOff => {
+                    const miniBush = new THREE.Mesh(new THREE.DodecahedronGeometry(0.18, 1), greenMat);
+                    miniBush.position.set(-2.3 + xSide, 0.22, 5.72 + zOff);
+                    siteGroup.add(miniBush);
+                });
+            });
+
+            // 3. Slatted Wooden Engawa Decks (as hatched in 1:100 Ground Floor Plan)
+            const deckPositions = [
+                [-0.25, -2.05, 0.55, 3.6], // West side of Volume E
+                [2.5, 2.2, 0.48, 1.8],     // West side of Volume I
+                [-2.35, 2.1, 1.2, 0.48]    // North step deck of Volume D
+            ];
+            deckPositions.forEach(([dx, dz, dw, dd]) => {
+                const dMesh = new THREE.Mesh(new THREE.BoxGeometry(dw, 0.07, dd), woodDeckMat);
+                dMesh.position.set(dx, 0.11, dz);
+                dMesh.receiveShadow = true;
+                siteGroup.add(dMesh);
+            });
+
+            // 4. Secondary Round Courtyard Cafe Table with 3 Chairs (North-Central Pocket in 1:100 Plan)
+            const cafeGroup = new THREE.Group();
+            const cafeTop = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 16), frameMat);
+            cafeTop.position.y = 0.70;
+            const cafePed = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.18, 0.70, 8), frameMat);
+            cafePed.position.y = 0.35;
+            cafeGroup.add(cafeTop, cafePed);
+            for (let c = 0; c < 3; c++) {
+                const ang = (c / 3) * Math.PI * 2 + 0.3;
+                const ch = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.42, 0.32), woodDeckMat);
+                ch.position.set(Math.cos(ang) * 0.62, 0.21, Math.sin(ang) * 0.62);
+                ch.rotation.y = -ang;
+                cafeGroup.add(ch);
+            }
+            cafeGroup.position.set(-0.35, 0.06, -3.5);
+            siteGroup.add(cafeGroup);
+
+            // 5. Square Planted Grid Patch (4x4 green tufts next to central courtyard in 1:100 Plan)
+            for (let gx = 0; gx < 4; gx++) {
+                for (let gz = 0; gz < 4; gz++) {
+                    const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.18, 5), greenMat);
+                    tuft.position.set(-0.15 + gx * 0.24, 0.14, 0.2 + gz * 0.24);
+                    siteGroup.add(tuft);
+                }
+            }
+        }
+
+        // ============================================================================
+        // 7. TAKASHI HOMMA COURTYARD READING TABLE VIGNETTE
+        // ============================================================================
+        function buildTakashiHommaCourtyardVignette() {
+            const vignette = new THREE.Group();
+            vignette.position.set(-0.85, 0.06, 2.75);
+
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.75 });
+            const whiteWoodMat = new THREE.MeshStandardMaterial({ color: 0xf5f5f4, roughness: 0.6 });
+            const turquoiseMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.5 });
+            const darkIronMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.6 });
+
+            const tableTop = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.03, 0.88), woodMat);
+            tableTop.position.set(0, 0.71, 0);
+            tableTop.castShadow = true;
+            vignette.add(tableTop);
+
+            [-0.36, 0.36].forEach(zOff => {
+                const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.82, 0.03), woodMat);
+                leg1.position.set(0, 0.35, zOff);
+                leg1.rotation.z = 0.46;
+                vignette.add(leg1);
+
+                const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.82, 0.03), woodMat);
+                leg2.position.set(0, 0.35, zOff);
+                leg2.rotation.z = -0.46;
+                vignette.add(leg2);
+            });
+
+            const openBook = new THREE.Mesh(
+                new THREE.BoxGeometry(0.32, 0.04, 0.42),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+            );
+            openBook.position.set(-0.08, 0.74, 0.05);
+            openBook.rotation.y = 0.12;
+            vignette.add(openBook);
+
+            // White wooden stool & seated resident
+            const stoolSeat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.035, 0.42), whiteWoodMat);
+            stoolSeat.position.set(-0.46, 0.44, 0.0);
+            vignette.add(stoolSeat);
+            [[-0.63, -0.17], [-0.29, -0.17], [-0.63, 0.17], [-0.29, 0.17]].forEach(([sx, sz]) => {
+                const sLeg = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.44, 0.035), whiteWoodMat);
+                sLeg.position.set(sx, 0.22, sz);
+                vignette.add(sLeg);
+            });
+
+            const blueSeat = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.03, 0.38), turquoiseMat);
+            blueSeat.position.set(-0.52, 0.42, -0.45);
+            vignette.add(blueSeat);
+            const blueBack = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.42, 0.38), turquoiseMat);
+            blueBack.position.set(-0.70, 0.63, -0.45);
+            vignette.add(blueBack);
+
+            const rSeat = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.36), woodMat);
+            rSeat.position.set(0.45, 0.41, -0.05);
+            vignette.add(rSeat);
+            const rBack = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.42, 0.36), darkIronMat);
+            rBack.position.set(0.62, 0.62, -0.05);
+            vignette.add(rBack);
+
+            // Resident reading in dark attire with brown shoes
+            const reader = new THREE.Group();
+            const clothesMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.85 });
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.6 });
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.8 });
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.48, 0.28), clothesMat);
+            torso.position.set(-0.46, 0.70, 0.0);
+            torso.rotation.z = -0.18;
+            reader.add(torso);
+
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 12, 12), skinMat);
+            head.position.set(-0.37, 1.03, 0.0);
+            reader.add(head);
+
+            const hair = new THREE.Mesh(new THREE.SphereGeometry(0.122, 12, 12), hairMat);
+            hair.position.set(-0.39, 1.05, 0.0);
+            reader.add(hair);
+
+            vignette.add(reader);
+            siteGroup.add(vignette);
+
+            // Galvanized threshold grate, outdoor standpipe faucet, black slip-on shoes & terracotta pots
+            const grateMat = new THREE.Mesh(
+                new THREE.BoxGeometry(1.75, 0.025, 0.55),
+                new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.6, roughness: 0.35 })
+            );
+            grateMat.position.set(-2.55, 0.07, 5.15);
+            siteGroup.add(grateMat);
+
+            const standpipe = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.018, 0.018, 0.68, 8),
+                new THREE.MeshStandardMaterial({ color: 0xcbd5e1, metalness: 0.7 })
+            );
+            standpipe.position.set(-0.68, 0.40, 4.92);
+            siteGroup.add(standpipe);
+
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
+            const shoe1 = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.06, 0.24), shoeMat);
+            shoe1.position.set(-0.58, 0.09, 4.35);
+            const shoe2 = shoe1.clone();
+            shoe2.position.set(-0.44, 0.09, 4.38);
+            siteGroup.add(shoe1, shoe2);
+
+            const terraMat = new THREE.MeshStandardMaterial({ color: 0xb45309, roughness: 0.85 });
+            const leafMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.8 });
+            [[-1.05, 4.95, 0.22], [-0.82, 5.18, 0.16], [-3.25, 5.05, 0.20]].forEach(([px, pz, r]) => {
+                const pot = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.72, r * 1.3, 12), terraMat);
+                pot.position.set(px, 0.06 + r * 0.65, pz);
+                siteGroup.add(pot);
+
+                const bush = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 1.1, 1), leafMat);
+                bush.position.set(px, 0.06 + r * 1.45, pz);
+                siteGroup.add(bush);
+            });
+        }
+
+        // ============================================================================
+        // 8. SATELLITE & 1:100 PLAN TREES, CAMELLIA SHRUB & STEPPING STONES
+        // ============================================================================
+        function buildCourtyardTreesAndGardens() {
+            const fgSapling = createArchitecturalTree(3.5, 0.85, 0x4d7c0f, true);
+            fgSapling.position.set(-2.35, 0, 5.45);
+            siteGroup.add(fgSapling);
+
+            const camelliaBush = createBushyCamelliaShrub();
+            camelliaBush.position.set(-0.18, 0, 4.25);
+            siteGroup.add(camelliaBush);
+
+            const bgSapling = createArchitecturalTree(2.9, 0.95, 0x65a30d, true);
+            bgSapling.position.set(-0.65, 0, 1.45);
+            siteGroup.add(bgSapling);
+
+            const neKeyaki = createArchitecturalTree(6.8, 2.35, 0x1e3f20, false);
+            neKeyaki.position.set(1.5, 0, -4.4);
+            siteGroup.add(neKeyaki);
+
+            const midCanopy = createArchitecturalTree(5.4, 1.9, 0x2d5a27, false);
+            midCanopy.position.set(-0.9, 0, -0.7);
+            siteGroup.add(midCanopy);
+
+            const redMomiji = createArchitecturalTree(4.6, 1.75, 0xc2410c, false);
+            redMomiji.position.set(-0.5, 0, 5.9);
+            siteGroup.add(redMomiji);
+
+            // Moss mounds & stepping stones
+            const mossMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.95 });
+            [[-1.2, -0.9, 1.4], [-0.4, 5.8, 1.5], [1.5, -4.4, 1.6]].forEach(([mx, mz, mr]) => {
+                const mound = new THREE.Mesh(new THREE.CylinderGeometry(mr * 0.8, mr, 0.08, 12), mossMat);
+                mound.position.set(mx, 0.06, mz);
+                siteGroup.add(mound);
+            });
+        }
+
+        function createArchitecturalTree(height, crownRadius, leafHex, isSlenderSapling) {
+            const tGroup = new THREE.Group();
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3b32, roughness: 0.9 });
+            const leafMat = new THREE.MeshStandardMaterial({ color: leafHex, roughness: 0.82 });
+
+            const trunkRadius = isSlenderSapling ? 0.045 : 0.14;
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(trunkRadius * 0.7, trunkRadius, height * 0.65, 8), trunkMat);
+            trunk.position.y = (height * 0.65) / 2;
+            trunk.castShadow = true;
+            tGroup.add(trunk);
+
+            const numClusters = isSlenderSapling ? 5 : 9;
+            for (let i = 0; i < numClusters; i++) {
+                const r = crownRadius * (0.48 + (i % 3) * 0.12);
+                const cluster = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 1), leafMat);
+                const angle = (i / numClusters) * Math.PI * 2;
+                const dist = isSlenderSapling ? crownRadius * 0.35 : crownRadius * 0.45;
+                cluster.position.set(
+                    Math.cos(angle) * dist,
+                    height * 0.58 + (i % 3) * (crownRadius * 0.42),
+                    Math.sin(angle) * dist
+                );
+                cluster.castShadow = true;
+                cluster.receiveShadow = true;
+                tGroup.add(cluster);
+            }
+            return tGroup;
+        }
+
+        function createBushyCamelliaShrub() {
+            const sGroup = new THREE.Group();
+            const stemMat = new THREE.MeshStandardMaterial({ color: 0x4a3b32, roughness: 0.9 });
+            const darkLeafMat = new THREE.MeshStandardMaterial({ color: 0x164e27, roughness: 0.75 });
+            const budMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.5 });
+
+            for (let s = 0; s < 4; s++) {
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.028, 1.85, 6), stemMat);
+                stem.position.set((s - 1.5) * 0.08, 0.92, (s % 2) * 0.08);
+                stem.rotation.z = (s - 1.5) * 0.08;
+                sGroup.add(stem);
+            }
+            for (let c = 0; c < 14; c++) {
+                const foliage = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28, 1), darkLeafMat);
+                const y = 0.45 + (c / 14) * 1.55;
+                const ang = c * 1.7;
+                const rad = 0.18 + (c % 3) * 0.12;
+                foliage.position.set(Math.cos(ang) * rad, y, Math.sin(ang) * rad);
+                foliage.castShadow = true;
+                sGroup.add(foliage);
+
+                if (c % 3 === 0) {
+                    const bud = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), budMat);
+                    bud.position.set(Math.cos(ang) * (rad + 0.16), y + 0.08, Math.sin(ang) * (rad + 0.16));
+                    sGroup.add(bud);
+                }
+            }
+            return sGroup;
+        }
+
+        // ============================================================================
+        // 9. SURROUNDING NISHI-KAMATA NEIGHBOR BUILDINGS
+        // ============================================================================
+        function buildSurroundingNeighbors() {
+            NEIGHBORS_DATA.forEach(nb => {
+                const nGroup = new THREE.Group();
+                nGroup.position.set(nb.x, 0, nb.z);
+
+                const bodyMat = new THREE.MeshStandardMaterial({ color: nb.wallColor, roughness: 0.85 });
+                const roofMat = new THREE.MeshStandardMaterial({ color: nb.roofColor, roughness: 0.72 });
+
+                const body = new THREE.Mesh(new THREE.BoxGeometry(nb.w, nb.h, nb.d), bodyMat);
+                body.position.y = nb.h / 2;
+                body.castShadow = true;
+                body.receiveShadow = true;
+                nGroup.add(body);
+
+                if (nb.roofType === 'hip') {
+                    const rCone = new THREE.Mesh(new THREE.ConeGeometry(Math.max(nb.w, nb.d) * 0.66, 1.9, 4), roofMat);
+                    rCone.position.y = nb.h + 0.95;
+                    rCone.rotation.y = Math.PI / 4;
+                    rCone.scale.set(nb.w / Math.max(nb.w, nb.d), 1, nb.d / Math.max(nb.w, nb.d));
+                    nGroup.add(rCone);
+                } else {
+                    const coping = new THREE.Mesh(new THREE.BoxGeometry(nb.w + 0.2, 0.25, nb.d + 0.2), roofMat);
+                    coping.position.y = nb.h + 0.12;
+                    nGroup.add(coping);
+                }
+
+                siteGroup.add(nGroup);
+                createFloating3DPin(nb.id, nb.name, nb.x, nb.h + 1.4, nb.z, 'neighbor');
+            });
+        }
+
+        // ============================================================================
+        // 10. BICYCLES (PARKED & MOVING), PEDESTRIANS, PETS & 1 UNOBSTRUCTED KEI CAR
+        // ============================================================================
+        function createDetailedBicycleMesh(frameHex) {
+            const bike = new THREE.Group();
+            const tireMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.7 });
+            const chromeMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.8, roughness: 0.2 });
+            const frameMat = new THREE.MeshStandardMaterial({ color: frameHex, roughness: 0.3, metalness: 0.4 });
+            const seatMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.8 });
+
+            const frontWheel = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.024, 8, 18), tireMat);
+            frontWheel.rotation.y = Math.PI / 2;
+            frontWheel.position.set(0, 0.30, 0.48);
+
+            const rearWheel = frontWheel.clone();
+            rearWheel.position.set(0, 0.30, -0.48);
+
+            const topTube = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.88, 8), frameMat);
+            topTube.rotation.x = Math.PI / 2 - 0.12;
+            topTube.position.set(0, 0.52, 0);
+
+            const seatPost = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.55, 8), chromeMat);
+            seatPost.position.set(0, 0.55, -0.24);
+            seatPost.rotation.x = -0.22;
+
+            const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, 0.22), seatMat);
+            saddle.position.set(0, 0.82, -0.30);
+
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.62, 8), chromeMat);
+            stem.position.set(0, 0.60, 0.42);
+            stem.rotation.x = -0.18;
+
+            const handlebar = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.48, 8), chromeMat);
+            handlebar.rotation.z = Math.PI / 2;
+            handlebar.position.set(0, 0.88, 0.36);
+
+            const basket = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.20, 0.22), chromeMat);
+            basket.position.set(0, 0.72, 0.54);
+
+            bike.add(frontWheel, rearWheel, topTube, seatPost, saddle, stem, handlebar, basket);
+            return { bike, frontWheel, rearWheel };
+        }
+
+        function createWalkingHumanMesh(shirtHex, pantsHex) {
+            const human = new THREE.Group();
+            const torso = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.14, 0.16, 0.64, 8),
+                new THREE.MeshStandardMaterial({ color: shirtHex, roughness: 0.8 })
+            );
+            torso.position.y = 1.02;
+            torso.castShadow = true;
+            human.add(torso);
+
+            const head = new THREE.Mesh(
+                new THREE.SphereGeometry(0.12, 10, 10),
+                new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.6 })
+            );
+            head.position.y = 1.48;
+            human.add(head);
+
+            const hair = new THREE.Mesh(
+                new THREE.SphereGeometry(0.125, 10, 10),
+                new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.85 })
+            );
+            hair.position.set(0, 1.51, -0.01);
+            human.add(hair);
+
+            const legGeo = new THREE.CylinderGeometry(0.055, 0.05, 0.65, 8);
+            const legMat = new THREE.MeshStandardMaterial({ color: pantsHex || 0x334155 });
+            const leftLeg = new THREE.Mesh(legGeo, legMat);
+            leftLeg.position.set(-0.07, 0.35, 0);
+            const rightLeg = new THREE.Mesh(legGeo, legMat);
+            rightLeg.position.set(0.07, 0.35, 0);
+
+            const armGeo = new THREE.CylinderGeometry(0.04, 0.038, 0.52, 8);
+            const leftArm = new THREE.Mesh(armGeo, torso.material);
+            leftArm.position.set(-0.19, 1.0, 0);
+            const rightArm = new THREE.Mesh(armGeo, torso.material);
+            rightArm.position.set(0.19, 1.0, 0);
+
+            human.add(leftLeg, rightLeg, leftArm, rightArm);
+            return { human, leftLeg, rightLeg, leftArm, rightArm };
+        }
+
+        function spawnBikesPedestriansAndSingleCar() {
+            // 1. Parked Mamachari Bicycles at exact locations shown in 1:100 Ground Floor Plan (image_23c043.jpg)
+            const parkedLocations = [
+                { x: -3.2, z: -6.15, rotY: Math.PI / 2, color: 0x0284c7 }, // North side of Volume A (Plan I)
+                { x: 1.5,  z: 8.85,  rotY: 1.25,        color: 0xdc2626 }, // Outside Volume G (Plan B bottom)
+                { x: 3.85, z: -2.9,  rotY: 0.15,        color: 0x059669 }  // Outside Volume E along East Lane
+            ];
+            parkedLocations.forEach(p => {
+                const { bike } = createDetailedBicycleMesh(p.color);
+                bike.position.set(p.x, 0.04, p.z);
+                bike.rotation.y = p.rotY;
+                bike.rotation.z = 0.08; // Leaning on kickstand
+                siteGroup.add(bike);
+            });
+
+            // 2. Three Moving Cyclists on Bicycles (East Lane & Unobstructed North Lane)
+            const cyclistConfigs = [
+                { axis: 'z', laneX: 5.55, pos: -22, speed: 4.2, dir: 1,  bikeColor: 0x2563eb, shirt: 0xf8fafc },
+                { axis: 'z', laneX: 7.25, pos: 16,  speed: 3.9, dir: -1, bikeColor: 0xea580c, shirt: 0x1e293b },
+                { axis: 'x', laneZ: -9.4, pos: -20, speed: 4.0, dir: 1,  bikeColor: 0x10b981, shirt: 0xfef08a }
+            ];
+
+            cyclistConfigs.forEach((cfg, idx) => {
+                const group = new THREE.Group();
+                const { bike, frontWheel, rearWheel } = createDetailedBicycleMesh(cfg.bikeColor);
+                const rider = createWalkingHumanMesh(cfg.shirt, 0x1e293b);
+                rider.human.position.set(0, 0.18, -0.18);
+                rider. torso = rider.human.children[0];
+                rider.torso.rotation.x = 0.25;
+                group.add(bike, rider.human);
+                siteGroup.add(group);
+
+                cyclists.push({
+                    mesh: group,
+                    frontWheel,
+                    rearWheel,
+                    leftLeg: rider.leftLeg,
+                    rightLeg: rider.rightLeg,
+                    phase: idx * 2.1,
+                    ...cfg
+                });
+            });
+
+            // 3. Only ONE Slow Japanese Kei Car strictly on the unobstructed East Lane (x = 6.75)
+            const keiCar = new THREE.Group();
+            const carBody = new THREE.Mesh(
+                new THREE.BoxGeometry(1.32, 0.86, 2.65),
+                new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.28 })
+            );
+            carBody.position.y = 0.52;
+            carBody.castShadow = true;
+            const carCabin = new THREE.Mesh(
+                new THREE.BoxGeometry(1.22, 0.55, 1.55),
+                new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.2 })
+            );
+            carCabin.position.set(0, 1.12, -0.1);
+            keiCar.add(carBody, carCabin);
+            siteGroup.add(keiCar);
+            vehicles.push({ mesh: keiCar, axis: 'z', laneX: 6.75, pos: -26, speed: 2.8, dir: 1 });
+
+            // 4. Seven Walking Pedestrians & Residents (Winding through Roji Garden Paths & Sidewalks)
+            const pedPaths = [
+                {
+                    // Resident walking between Volume A, central court, and Volume D
+                    points: [
+                        new THREE.Vector3(-0.95, 0.06, -3.2),
+                        new THREE.Vector3(-0.85, 0.06, -1.2),
+                        new THREE.Vector3(-2.15, 0.06, 0.7),
+                        new THREE.Vector3(-0.85, 0.06, -1.2)
+                    ],
+                    speed: 0.75, shirt: 0x18181b, pants: 0x334155
+                },
+                {
+                    // Resident strolling between East Lane, Volume F, and South Maple Court
+                    points: [
+                        new THREE.Vector3(4.65, 0.0, 0.2),
+                        new THREE.Vector3(1.9, 0.06, 0.4),
+                        new THREE.Vector3(-0.3, 0.06, 4.8),
+                        new THREE.Vector3(1.9, 0.06, 0.4)
+                    ],
+                    speed: 0.68, shirt: 0x059669, pants: 0x1e293b
+                },
+                {
+                    // Resident walking between Volume B and NE Keyaki corner
+                    points: [
+                        new THREE.Vector3(-0.8, 0.06, -4.4),
+                        new THREE.Vector3(1.2, 0.06, -4.3),
+                        new THREE.Vector3(4.65, 0.0, -4.2),
+                        new THREE.Vector3(1.2, 0.06, -4.3)
+                    ],
+                    speed: 0.72, shirt: 0xd97706, pants: 0x27272a
+                },
+                {
+                    // East Lane pedestrian 1 (West edge sidewalk)
+                    points: [
+                        new THREE.Vector3(4.85, 0.0, -20.0),
+                        new THREE.Vector3(4.85, 0.0, 20.0)
+                    ],
+                    speed: 1.12, shirt: 0x0284c7, pants: 0x334155
+                },
+                {
+                    // East Lane pedestrian 2 (East edge sidewalk)
+                    points: [
+                        new THREE.Vector3(7.95, 0.0, 18.0),
+                        new THREE.Vector3(7.95, 0.0, -18.0)
+                    ],
+                    speed: 1.05, shirt: 0xe11d48, pants: 0x1e293b
+                },
+                {
+                    // North Lane pedestrian (Unobstructed sidewalk z = -8.2)
+                    points: [
+                        new THREE.Vector3(-18.0, 0.0, -8.2),
+                        new THREE.Vector3(18.0, 0.0, -8.2)
+                    ],
+                    speed: 1.08, shirt: 0x4f46e5, pants: 0x334155
+                }
+            ];
+
+            pedPaths.forEach((p, idx) => {
+                const { human, leftLeg, rightLeg, leftArm, rightArm } = createWalkingHumanMesh(p.shirt, p.pants);
+                siteGroup.add(human);
+                pedestrians.push({
+                    mesh: human,
+                    leftLeg, rightLeg, leftArm, rightArm,
+                    points: p.points,
+                    segIndex: 0,
+                    segProgress: (idx * 0.23) % 1,
+                    speed: p.speed,
+                    phase: idx * 1.7
+                });
+            });
+
+            // 5. Courtyard Cat & Shiba Dog (matching silhouettes in Krista Cy Kim 1:100 Plan image_23c043.jpg)
+            const petConfigs = [
+                {
+                    points: [
+                        new THREE.Vector3(-1.4, 0.06, 6.2),
+                        new THREE.Vector3(-0.2, 0.06, 5.2),
+                        new THREE.Vector3(-0.2, 0.06, 8.2)
+                    ],
+                    color: 0xd97706, scale: 1.0, speed: 0.45 // Shiba Dog
+                },
+                {
+                    points: [
+                        new THREE.Vector3(-1.5, 0.06, -1.8),
+                        new THREE.Vector3(-2.6, 0.06, 1.2),
+                        new THREE.Vector3(-1.1, 0.06, 1.5)
+                    ],
+                    color: 0x18181b, scale: 0.72, speed: 0.38 // Tuxedo Cat
+                }
+            ];
+
+            petConfigs.forEach(cfg => {
+                const pet = new THREE.Group();
+                const mat = new THREE.MeshStandardMaterial({ color: cfg.color, roughness: 0.8 });
+                const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.36), mat);
+                body.position.y = 0.16;
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.16), mat);
+                head.position.set(0, 0.26, 0.18);
+                const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.18, 6), mat);
+                tail.position.set(0, 0.24, -0.18);
+                tail.rotation.x = -0.6;
+                pet.add(body, head, tail);
+                pet.scale.setScalar(cfg.scale);
+                siteGroup.add(pet);
+                gardenPets.push({ mesh: pet, points: cfg.points, segIndex: 0, segProgress: 0, speed: cfg.speed });
+            });
+        }
+
+        // ============================================================================
+        // 11. UI, CAMERA CHAPTERS & VIEW MODES
+        // ============================================================================
+        function buildVolumePillsUI() {
+            const bar = document.getElementById('volume-pills-bar');
+            VOLUMES_DATA.forEach(vol => {
+                const btn = document.createElement('button');
+                btn.id = `pill-${vol.id}`;
+                btn.className = 'vol-pill w-6 h-6 rounded-lg text-xs font-bold bg-zinc-200/80 text-zinc-800 hover:bg-zinc-900 hover:text-white transition flex items-center justify-center shrink-0';
+                btn.textContent = vol.shortLabel;
+                btn.onclick = () => inspectVolume(vol.id, true);
+                bar.appendChild(btn);
+            });
+        }
+
+        function createFloating3DPin(id, label, localX, localY, localZ, type) {
+            const container = document.getElementById('markers-container');
+            const el = document.createElement('div');
+            if (type === 'volume') {
+                el.className = 'scene-marker px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-900/90 text-white border border-white/30 shadow flex items-center gap-1';
+                el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>${label}</span>`;
+            } else {
+                el.className = 'scene-marker px-1.5 py-0.5 rounded text-[9px] font-semibold bg-white/85 text-zinc-700 border border-zinc-300 shadow-sm whitespace-nowrap';
+                el.innerHTML = `<span>${label}</span>`;
+            }
+            el.onclick = (e) => {
+                e.stopPropagation();
+                inspectVolume(id, true);
+            };
+            container.appendChild(el);
+
+            const worldPos = new THREE.Vector3(localX, localY, localZ).applyAxisAngle(new THREE.Vector3(0, 1, 0), SITE_ROTATION);
+            markerElements.push({ id, el, worldPos, type });
+        }
+
+        function inspectVolume(id, focusCam) {
+            Object.keys(volumeEdges).forEach(k => {
+                volumeEdges[k].visible = (k === id);
+            });
+            VOLUMES_DATA.forEach(v => {
+                const pill = document.getElementById(`pill-${v.id}`);
+                if (pill) pill.classList.toggle('active', v.id === id);
+            });
+
+            const vol = VOLUMES_DATA.find(v => v.id === id);
+            const nb = NEIGHBORS_DATA.find(n => n.id === id);
+            const card = document.getElementById('inspector-card');
+            card.classList.remove('hidden');
+
+            if (vol) {
+                document.getElementById('insp-tag').textContent = vol.tag;
+                document.getElementById('insp-title').textContent = vol.name;
+                document.getElementById('insp-desc').textContent = vol.desc;
+                document.getElementById('insp-program').textContent = vol.program;
+                document.getElementById('insp-levels').textContent = vol.levelsText;
+                document.getElementById('insp-concept').textContent = `"${vol.concept}"`;
+
+                if (focusCam) {
+                    const worldTarget = new THREE.Vector3(vol.x, vol.h * 0.45, vol.z).applyAxisAngle(new THREE.Vector3(0, 1, 0), SITE_ROTATION);
+                    camState.desiredTarget.copy(worldTarget);
+                    camState.desiredRadius = Math.max(9.5, vol.h * 1.9);
+                    camState.desiredPhi = 1.02;
+                }
+            } else if (nb) {
+                document.getElementById('insp-tag').textContent = 'Ota Ward Context';
+                document.getElementById('insp-title').textContent = nb.name;
+                document.getElementById('insp-desc').textContent = nb.desc;
+                document.getElementById('insp-program').textContent = 'Adjacent Building';
+                document.getElementById('insp-levels').textContent = `${nb.h.toFixed(1)}m Height`;
+                document.getElementById('insp-concept').textContent = 'Frames the unfenced Moriyama House parcel.';
+            }
+        }
+
+        function closeInspector() {
+            document.getElementById('inspector-card').classList.add('hidden');
+            Object.keys(volumeEdges).forEach(k => volumeEdges[k].visible = false);
+            VOLUMES_DATA.forEach(v => {
+                const pill = document.getElementById(`pill-${v.id}`);
+                if (pill) pill.classList.remove('active');
+            });
+        }
+
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            ['exterior', 'courtyard', 'dollhouse', 'xray', 'satellite'].forEach(m => {
+                const btn = document.getElementById(`mode-${m}`);
+                if (btn) btn.classList.toggle('active', m === mode);
+            });
+
+            Object.keys(volumeWallMaterials).forEach(id => {
+                const mat = volumeWallMaterials[id];
+                if (mode === 'xray') {
+                    mat.opacity = 0.24;
+                    mat.depthWrite = false;
+                } else {
+                    mat.opacity = 1.0;
+                    mat.depthWrite = true;
+                }
+            });
+
+            Object.keys(volumeRoofGroups).forEach(id => {
+                volumeRoofGroups[id].visible = (mode !== 'dollhouse');
+            });
+        }
+
+        function triggerCourtyardPhotoView() {
+            setViewMode('courtyard');
+            selectChapter(2, true);
+            inspectVolume('D', false);
+        }
+
+        function triggerSatelliteMatchView() {
+            setViewMode('satellite');
+            selectChapter(1, true);
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            const btn = document.getElementById('mode-labels');
+            btn.classList.toggle('bg-zinc-900', showLabels);
+            btn.classList.toggle('text-white', showLabels);
+            markerElements.forEach(m => {
+                m.el.style.display = showLabels ? 'flex' : 'none';
+            });
+        }
+
+        function selectChapter(index, keepMode) {
+            const chap = CHAPTERS[index];
+            for (let i = 0; i < CHAPTERS.length; i++) {
+                const b = document.getElementById(`chap-btn-${i}`);
+                if (b) b.classList.toggle('active', i === index);
+            }
+            const worldTarget = new THREE.Vector3(chap.target.x, chap.target.y, chap.target.z)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), SITE_ROTATION);
+            camState.desiredTarget.copy(worldTarget);
+            camState.desiredRadius = chap.spherical.radius;
+            camState.desiredPhi = chap.spherical.phi;
+            camState.desiredTheta = chap.spherical.theta;
+
+            if (!keepMode && chap.mode) setViewMode(chap.mode);
+            if (chap.timePreset !== undefined) updateTimeOfDay(chap.timePreset);
+        }
+
+        function updateTimeOfDay(val) {
+            currentTimeHours = parseFloat(val);
+            const hrs = Math.floor(currentTimeHours);
+            const mins = Math.floor((currentTimeHours - hrs) * 60);
+            const isNight = (currentTimeHours < 6.0 || currentTimeHours > 18.5);
+            const isDuskDawn = (currentTimeHours >= 5.2 && currentTimeHours <= 6.8) || (currentTimeHours >= 17.2 && currentTimeHours <= 19.0);
+
+            let periodLabel = 'Day';
+            if (isNight) periodLabel = 'Night';
+            else if (isDuskDawn) periodLabel = 'Dusk';
+
+            const timeStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+            const desktopLabel = document.getElementById('time-label');
+            if (desktopLabel) desktopLabel.textContent = `${timeStr} • ${periodLabel}`;
+
+            const sDesktop = document.getElementById('time-slider');
+            if (sDesktop && parseFloat(sDesktop.value) !== currentTimeHours) sDesktop.value = currentTimeHours;
+
+            const normalizedTime = (currentTimeHours - 6) / 12;
+            const sunAngle = normalizedTime * Math.PI;
+            const sunY = Math.sin(sunAngle) * 44;
+            sunLight.position.set(-Math.cos(sunAngle) * 34, Math.max(2.5, sunY), 24);
+
+            if (isNight) {
+                scene.background.setHex(0x0f172a);
+                scene.fog.color.setHex(0x0f172a);
+                sunLight.intensity = 0.08;
+                ambientLight.intensity = 0.25;
+                hemiLight.intensity = 0.2;
+                interiorPointLights.forEach(l => l.intensity = 1.45);
+                streetPointLights.forEach(l => l.intensity = 1.3);
+            } else if (isDuskDawn) {
+                scene.background.setHex(0xfdba74);
+                scene.fog.color.setHex(0xfdba74);
+                sunLight.color.setHex(0xfb923c);
+                sunLight.intensity = 0.88;
+                ambientLight.intensity = 0.42;
+                hemiLight.intensity = 0.45;
+                interiorPointLights.forEach(l => l.intensity = 1.1);
+                streetPointLights.forEach(l => l.intensity = 0.9);
+            } else {
+                scene.background.setHex(0xcbd5e1);
+                scene.fog.color.setHex(0xcbd5e1);
+                sunLight.color.setHex(0xfffbeb);
+                sunLight.intensity = 1.38;
+                ambientLight.intensity = 0.56;
+                hemiLight.intensity = 0.64;
+                interiorPointLights.forEach(l => l.intensity = 0.35);
+                streetPointLights.forEach(l => l.intensity = 0.0);
+            }
+        }
+
+        // ============================================================================
+        // 12. CAMERA CONTROLS & ANIMATION LOOP
+        // ============================================================================
+        function setupOrbitAndRaycastControls() {
+            const dom = renderer.domElement;
+
+            dom.addEventListener('pointerdown', (e) => {
+                if (e.button === 0) camState.isDragging = true;
+                if (e.button === 2) camState.isPanning = true;
+                camState.prevMouse = { x: e.clientX, y: e.clientY };
+                camState.pointerDownPos = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (!camState.isDragging && !camState.isPanning) return;
+                const dx = e.clientX - camState.prevMouse.x;
+                const dy = e.clientY - camState.prevMouse.y;
+                camState.prevMouse = { x: e.clientX, y: e.clientY };
+
+                if (camState.isDragging) {
+                    camState.desiredTheta -= dx * 0.0065;
+                    camState.desiredPhi = THREE.MathUtils.clamp(camState.desiredPhi - dy * 0.0065, 0.03, Math.PI / 2 - 0.03);
+                } else if (camState.isPanning) {
+                    const panFactor = camState.radius * 0.0014;
+                    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                    forward.y = 0;
+                    forward.normalize();
+                    camState.desiredTarget.addScaledVector(right, -dx * panFactor);
+                    camState.desiredTarget.addScaledVector(forward, dy * panFactor);
+                }
+            });
+
+            window.addEventListener('pointerup', (e) => {
+                const moveDist = Math.hypot(e.clientX - camState.pointerDownPos.x, e.clientY - camState.pointerDownPos.y);
+                if (moveDist < 5 && e.button === 0 && e.target === dom) {
+                    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+                    const hits = raycaster.intersectObjects(volumeMeshes);
+                    if (hits.length > 0 && hits[0].object.userData.volumeId) {
+                        inspectVolume(hits[0].object.userData.volumeId, true);
+                    }
+                }
+                camState.isDragging = false;
+                camState.isPanning = false;
+            });
+
+            dom.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                camState.desiredRadius = THREE.MathUtils.clamp(camState.desiredRadius + e.deltaY * 0.022, 3.2, 72);
+            }, { passive: false });
+
+            dom.addEventListener('contextmenu', e => e.preventDefault());
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const elapsed = clock.getElapsedTime();
+
+            // 1. Smooth Camera Damping
+            camState.target.lerp(camState.desiredTarget, 0.08);
+            camState.radius += (camState.desiredRadius - camState.radius) * 0.08;
+            camState.phi += (camState.desiredPhi - camState.phi) * 0.08;
+            camState.theta += (camState.desiredTheta - camState.theta) * 0.08;
+
+            const cx = camState.target.x + camState.radius * Math.sin(camState.phi) * Math.sin(camState.theta);
+            const cy = camState.target.y + camState.radius * Math.cos(camState.phi);
+            const cz = camState.target.z + camState.radius * Math.sin(camState.phi) * Math.cos(camState.theta);
+            camera.position.set(cx, cy, cz);
+            camera.lookAt(camState.target);
+
+            // 2. Gentle Linen Curtain Breeze
+            curtainMeshes.forEach(c => {
+                c.position.z = c.userData.baseZ + Math.sin(elapsed * 1.8 + c.userData.phase) * 0.025;
+            });
+
+            // 3. Animate Single Unobstructed Kei Car
+            vehicles.forEach(v => {
+                v.pos += v.speed * v.dir * dt;
+                if (v.pos > 28) v.pos = -28;
+                if (v.pos < -28) v.pos = 28;
+                v.mesh.position.set(v.laneX, 0, v.pos);
+                v.mesh.rotation.y = v.dir > 0 ? 0 : Math.PI;
+            });
+
+            // 4. Animate Moving Cyclists on Bicycles
+            cyclists.forEach(c => {
+                c.pos += c.speed * c.dir * dt;
+                if (c.pos > 26) c.pos = -26;
+                if (c.pos < -26) c.pos = 26;
+
+                if (c.axis === 'z') {
+                    c.mesh.position.set(c.laneX, 0, c.pos);
+                    c.mesh.rotation.y = c.dir > 0 ? 0 : Math.PI;
+                } else {
+                    c.mesh.position.set(c.pos, 0, c.laneZ);
+                    c.mesh.rotation.y = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+                }
+
+                const pedal = Math.sin(elapsed * 10.5 + c.phase) * 0.38;
+                c.leftLeg.rotation.x = pedal;
+                c.rightLeg.rotation.x = -pedal;
+            });
+
+            // 5. Animate Walking Pedestrians & Residents
+            pedestrians.forEach(p => {
+                const pts = p.points;
+                const pA = pts[p.segIndex];
+                const pB = pts[(p.segIndex + 1) % pts.length];
+                const segLen = pA.distanceTo(pB);
+
+                p.segProgress += (p.speed * dt) / Math.max(0.1, segLen);
+                if (p.segProgress >= 1) {
+                    p.segProgress = 0;
+                    p.segIndex = (p.segIndex + 1) % pts.length;
+                }
+
+                const curA = pts[p.segIndex];
+                const curB = pts[(p.segIndex + 1) % pts.length];
+                p.mesh.position.lerpVectors(curA, curB, p.segProgress);
+
+                const angle = Math.atan2(curB.x - curA.x, curB.z - curA.z);
+                p.mesh.rotation.y = angle;
+
+                const swing = Math.sin(elapsed * 7.5 + p.phase) * 0.35;
+                p.leftLeg.rotation.x = swing;
+                p.rightLeg.rotation.x = -swing;
+                p.leftArm.rotation.x = -swing * 0.7;
+                p.rightArm.rotation.x = swing * 0.7;
+            });
+
+            // 6. Animate Courtyard Dog & Cat
+            gardenPets.forEach(pet => {
+                const pts = pet.points;
+                const pA = pts[pet.segIndex];
+                const pB = pts[(pet.segIndex + 1) % pts.length];
+                pet.segProgress += (pet.speed * dt) / Math.max(0.1, pA.distanceTo(pB));
+                if (pet.segProgress >= 1) {
+                    pet.segProgress = 0;
+                    pet.segIndex = (pet.segIndex + 1) % pts.length;
+                }
+                const curA = pts[pet.segIndex];
+                const curB = pts[(pet.segIndex + 1) % pts.length];
+                pet.mesh.position.lerpVectors(curA, curB, pet.segProgress);
+                pet.mesh.rotation.y = Math.atan2(curB.x - curA.x, curB.z - curA.z);
+            });
+
+            // 7. Update Floating 3D Pins
+            if (showLabels) {
+                const halfW = window.innerWidth * 0.5;
+                const halfH = window.innerHeight * 0.5;
+                markerElements.forEach(m => {
+                    tempProjVec.copy(m.worldPos).project(camera);
+                    if (tempProjVec.z > 1) {
+                        m.el.style.display = 'none';
+                    } else {
+                        m.el.style.display = 'flex';
+                        const x = (tempProjVec.x * halfW + halfW) | 0;
+                        const y = (-tempProjVec.y * halfH + halfH) | 0;
+                        m.el.style.left = `${x}px`;
+                        m.el.style.top = `${y}px`;
+                    }
+                });
+            }
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
