@@ -1,2 +1,2 @@
 # MoriyamaHouse
-https://github.sprinorama.io/MoriyamaHouse
+https://sprinorama.github.io/MoriyamaHouse
